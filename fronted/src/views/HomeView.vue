@@ -19,7 +19,7 @@
         />
         <div class="ask-actions">
           <span class="ask-tools">
-            <span class="ask-hint">回车开始采访</span>
+
           </span>
           <button
             class="ask-go"

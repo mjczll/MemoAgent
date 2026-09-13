@@ -197,7 +197,7 @@ const edgeFilter = ref<string[]>([]);
 
 /* ---- Forces & Display ---- */
 const forces = reactive<ForcesConfig>({ center: 40, repulsion: 30, attraction: 80, linkLength: 50 });
-const display = reactive<DisplayConfig>({ showLabels: true, textOpacity: 0.5, nodeScale: 1, linkWidth: 1 });
+const display = reactive<DisplayConfig>({ showLabels: true, textOpacity: 0.85, nodeScale: 1, linkWidth: 1 });
 
 /* ---- Engine ---- */
 const canvasHost = ref<HTMLElement | null>(null);
@@ -333,7 +333,15 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.graph-page { height: calc(100vh - 64px); margin: -14px -14px 0; position: relative; }
+.graph-page {
+  position: fixed;
+  top: var(--topbar-h, 41px);
+  bottom: 0;
+  left: var(--rail-w, 232px);
+  right: 0;
+  width: auto;
+  z-index: 5;
+}
 .canvas-area { position: relative; width: 100%; height: 100%; }
 
 /* 齿轮 */

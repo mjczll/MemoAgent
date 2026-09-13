@@ -294,7 +294,7 @@ export class GraphEngine {
 
       const t = new Text({
         text: n.label,
-        style: { fontSize: 10, fill: "#8a8a8d", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" },
+        style: { fontSize: 11, fill: "#b8b8bc", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif", fontWeight: "500" },
       });
       t.anchor.set(0.5, 0);
       t.alpha = this.display.textOpacity;
@@ -350,8 +350,8 @@ export class GraphEngine {
       const sx = sn.x, sy = sn.y, tx = tn.x, ty = tn.y;
       if (sx == null || sy == null || tx == null || ty == null) continue;
 
-      let alpha = 0.25;
-      let lineW = 0.8 * lw;
+      let alpha = 0.12;
+      let lineW = 0.5 * lw;
       let r = 138, g_ = 138, b = 141; // #8a8a8d
 
       if (hasFocus) {
@@ -422,11 +422,11 @@ export class GraphEngine {
           alpha = nb?.has(n.id) ? 0.9 : 0.15;
         }
       } else if (this.hoveredId === n.id) {
-        scale = 1.18;
+        scale = 1.08;
         alpha = 1;
-        borderW = 2;
+        borderW = 1;
         borderColor = 0xffffff;
-        borderAlpha = 0.6;
+        borderAlpha = 0.45;
       } else if (this.selectedId === n.id) {
         scale = 1.12;
         alpha = 1;
@@ -462,19 +462,8 @@ export class GraphEngine {
   }
 
   private drawGlow(): void {
-    const g = this.glowG;
-    g.clear();
-    if (!this.hoveredId) return;
-    const n = this.nodeMap.get(this.hoveredId);
-    if (n?.x == null) return;
-
-    const r = n.size * 0.5 * this.display.nodeScale;
-    const glowR = r * 3;
-    const col = typeof n.color === "string" && n.color.startsWith("#")
-      ? parseInt(n.color.replace("#", ""), 16) : 0x8a8a8d;
-
-    g.circle(n.x ?? 0, n.y ?? 0, glowR).fill({ color: col, alpha: 0.08 });
-    g.circle(n.x ?? 0, n.y ?? 0, glowR * 0.6).fill({ color: col, alpha: 0.05 });
+    // 已移除夸张的彩色光晕，hover 仅依赖节点描边与连线高亮，保持界面克制。
+    this.glowG.clear();
   }
 
   private drawLabels(): void {
@@ -489,9 +478,9 @@ export class GraphEngine {
 
       let vis = show && n.degree >= 2;
       let op = baseOp;
-      let fw: "400" | "500" | "600" | "700" = "400";
-      let fs = 10;
-      let col = "#8a8a8d";
+      let fw: "400" | "500" | "600" | "700" = "500";
+      let fs = 11;
+      let col = "#b8b8bc";
 
       // 拖拽中：拖拽节点标签高亮
       if (this.grabbing && this.grabNode) {
@@ -505,18 +494,18 @@ export class GraphEngine {
       } else if (this.hoveredId === n.id || this.selectedId === n.id) {
         vis = true;
         op = 1;
-        fw = this.hoveredId === n.id ? "700" : "600";
-        fs = 12;
+        fw = "600";
+        fs = 11.5;
         col = "#ededee";
       } else if (this.hoveredId || this.selectedId) {
         const cid = this.hoveredId ?? this.selectedId!;
         const nb = this.adj.get(cid);
         if (nb?.has(n.id)) {
           vis = true;
-          op = 0.85;
+          op = 0.9;
           fw = "500";
-          fs = 10.5;
-          col = "#c0c0c3";
+          fs = 11;
+          col = "#c8c8cb";
         } else {
           op = 0.08;
         }
@@ -543,12 +532,7 @@ export class GraphEngine {
   private onNodeHover(id: string | null): void {
     if (this.grabbing) return;
     this.hoveredId = id;
-    if (id) {
-      const n = this.nodeMap.get(id);
-      if (n) this.app.canvas.style.cursor = "pointer";
-    } else {
-      this.app.canvas.style.cursor = "pointer";
-    }
+    this.updateCursor();
     this.events.onHover(id);
   }
 
@@ -563,7 +547,7 @@ export class GraphEngine {
     n.fx = n.x;
     n.fy = n.y;
     this.sim.alphaTarget(0.1).restart();
-    this.app.canvas.style.cursor = "pointer";
+    this.updateCursor();
 
     const onMove = (ev: PointerEvent) => {
       if (!this.grabbing || !this.grabNode) return;
@@ -582,7 +566,7 @@ export class GraphEngine {
       this.grabNode = null;
       this.pixiNodes.forEach((g) => { g.eventMode = "static"; });
       this.sim.alphaTarget(0);
-      this.app.canvas.style.cursor = "pointer";
+      this.updateCursor();
       this.events.onSelect(n.id);
       this.selectedId = n.id;
       window.removeEventListener("pointermove", onMove);
@@ -591,6 +575,15 @@ export class GraphEngine {
 
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
+  }
+
+  /** 统一管理光标：默认箭头 / 节点手型 / 拖节点手型 / 拖界面箭头 */
+  private updateCursor(): void {
+    const c = this.app.canvas as HTMLCanvasElement;
+    if (this.grabbing) { c.style.cursor = "pointer"; return; }
+    if (this.panning) { c.style.cursor = "default"; return; }
+    if (this.hoveredId) { c.style.cursor = "pointer"; return; }
+    c.style.cursor = "default";
   }
 
   select(id: string | null): void {
@@ -696,7 +689,7 @@ export class GraphEngine {
       this.panning = true;
       panMoved = false;
       this.panLast = { x: e.clientX, y: e.clientY };
-      c.style.cursor = "pointer";
+      this.updateCursor();
     });
 
     window.addEventListener("pointermove", (e: PointerEvent) => {
@@ -721,7 +714,7 @@ export class GraphEngine {
         this.events.onHover(null);
       }
       this.panning = false;
-      if (!this.grabbing) c.style.cursor = "pointer";
+      this.updateCursor();
     });
 
     c.addEventListener("dblclick", () => this.fitView());
