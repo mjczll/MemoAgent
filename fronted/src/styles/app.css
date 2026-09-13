@@ -34,7 +34,7 @@
   --radius: 5px;
   --radius-lg: 10px;
   --rail-w: 232px;
-  --rail-collapsed-w: 0px;
+  --rail-collapsed-w: 56px;
   --maxw: 1180px;
   --font: "Inter", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
@@ -140,7 +140,8 @@ select {
 
 /* ---------- 布局骨架 ---------- */
 .shell {
-  display: flex;
+  display: block;
+  position: relative;
   height: 100%;
   min-height: 100%;
   background: var(--paper);
@@ -150,39 +151,43 @@ select {
 }
 
 .rail {
-  position: relative;
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
   z-index: 30;
   display: flex;
   flex-direction: column;
   width: var(--rail-w);
-  flex: 0 0 var(--rail-w);
   height: 100%;
   border-right: 1px solid var(--line);
   background: var(--paper);
+  overflow: hidden;
+  transition: width 0.28s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* 折叠态：rail 收成窄图标列 */
+.shell--collapsed .rail {
+  width: var(--rail-collapsed-w);
+}
+
+/* === 顶部品牌区：纯展示 === */
 .rail-head {
-  padding: 14px 14px 10px;
-}
-
-.brand {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  padding: 12px 12px 10px 16px;
+  margin: 0;
+  position: relative;
+  min-height: 42px;
 }
 
-.brand-mark {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 5px;
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--ink);
-  font-family: var(--mono);
-  font-weight: 500;
-  font-size: 11px;
+.brand-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
 }
 
 .brand-text b {
@@ -191,10 +196,49 @@ select {
   letter-spacing: 0.2px;
   font-weight: 500;
   color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .brand-text span {
   display: none;
+}
+
+/* === 折叠/展开按钮：骑在侧栏右边缘的悬浮圆按钮 === */
+.rail-toggle-btn {
+  position: absolute;
+  top: 50%;
+  right: -12px;
+  transform: translateY(-50%);
+  z-index: 5;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--mute);
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.14s ease, border-color 0.14s ease, background 0.14s ease;
+}
+
+.rail-toggle-btn:hover {
+  color: var(--ink);
+  border-color: var(--accent-line);
+  background: var(--surface-2, rgba(255, 255, 255, 0.04));
+}
+
+.rail-toggle-btn:focus-visible {
+  outline: 1px solid var(--accent-line);
+  outline-offset: 2px;
+}
+
+.rail-toggle-btn svg {
+  width: 12px;
+  height: 12px;
 }
 
 .rail-scroll {
@@ -213,6 +257,62 @@ select {
   padding: 0;
   font-size: 10.5px;
   color: var(--faint);
+}
+
+/* 最近会话分组标题：整行可点击切换收起/展开 */
+.rail-group.rail-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: calc(100% - 12px);
+  margin: 12px 6px 4px;
+  padding: 4px 8px;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--faint);
+  font-size: 10.5px;
+  font-family: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+
+.rail-group.rail-toggle:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.rail-group.rail-toggle .rail-group-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--faint);
+}
+
+.rail-group.rail-toggle .rail-group-count {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 0 5px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  min-width: 14px;
+  text-align: center;
+}
+
+.rail-group.rail-toggle .rail-caret {
+  display: inline-block;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid currentColor;
+  transition: transform 0.18s ease;
+}
+
+.rail-group.rail-toggle.collapsed .rail-caret {
+  transform: rotate(-90deg);
 }
 
 .nav {
@@ -248,10 +348,11 @@ select {
 
 .nav-ico {
   width: 14px;
+  height: 14px;
   text-align: center;
-  font-size: 12px;
   opacity: 0.9;
   color: var(--mute);
+  flex: 0 0 auto;
 }
 
 .nav-item.active .nav-ico,
@@ -277,30 +378,38 @@ select {
 }
 
 .main {
-  flex: 1;
   min-width: 0;
   height: 100%;
   overflow-y: auto;
   position: relative;
   background: var(--paper);
+  /* 主区占满整个 shell 宽度（不减去 rail 宽度，rail 是 absolute 浮在上面） */
+  padding-left: var(--rail-w);
+  transition: padding-left 0.28s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .main-inner {
   position: relative;
   z-index: 2;
-  max-width: var(--maxw);
-  margin: 0 auto;
+  width: 100%;
+  margin: 0;
   padding: 18px 24px 56px;
 }
 
-.main-inner.narrow {
+/* 主区内的内容容器：使用单独类 .main-stack 来限宽居中，
+   保证侧栏开合时不会被 max-width "挤压居中" */
+.main-stack {
+  max-width: var(--maxw);
+  margin: 0 auto;
+}
+
+.main-stack.narrow {
   max-width: 880px;
 }
 
-.main-inner.wide {
+.main-stack.wide {
   max-width: 1420px;
 }
-
 .topbar {
   position: sticky;
   top: 0;
@@ -309,7 +418,9 @@ select {
   align-items: center;
   gap: 10px;
   padding: 8px 24px;
+  padding-left: calc(var(--rail-w) + 8px);
   min-height: var(--topbar-h, 41px);
+  transition: padding-left 0.28s cubic-bezier(0.4, 0, 0.2, 1);
   border-bottom: 1px solid var(--line);
   background: color-mix(in srgb, var(--paper) 90%, transparent);
   backdrop-filter: blur(8px);
@@ -326,6 +437,10 @@ select {
 .topbar .crumbs b {
   color: var(--ink);
   font-weight: 500;
+}
+
+.topbar .topbar-spacer {
+  flex: 0 0 auto;
 }
 
 .topbar .spacer {
@@ -1740,83 +1855,84 @@ details.fold .fold-body {
    ========================================================================== */
 
 /* ---------- 侧栏折叠 ---------- */
-.rail-fold {
-  position: absolute;
-  top: 16px;
-  right: -12px;
-  z-index: 5;
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--paper);
-  color: var(--mute);
-  cursor: pointer;
-  transition: color 0.18s ease, border-color 0.18s ease;
-}
-
-.rail-fold:hover {
-  color: var(--ink);
-  border-color: var(--accent-line);
-}
-
-.rail-fold i {
-  width: 8px;
-  height: 8px;
-  border-right: 1.2px solid currentColor;
-  border-top: 1.2px solid currentColor;
-  display: block;
-  transform: rotate(45deg) translate(-1px, 1px);
-  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
 .shell--collapsed .rail {
   flex: 0 0 var(--rail-collapsed-w);
   width: var(--rail-collapsed-w);
-  border-right-color: transparent;
+  border-right-color: var(--line);
   overflow: hidden;
 }
 
-.shell--collapsed .rail-fold i {
-  transform: rotate(-135deg) translate(-1px, 1px);
+/* === 窄图标栏：所有文字 / 分组标题 隐藏，仅保留折叠按钮（居中） === */
+.shell--collapsed .rail-head {
+  padding: 12px 0 10px;
+  justify-content: center;
 }
 
-.shell--collapsed .main-inner {
-  /* 侧栏折叠后让主区吃掉全部宽度 */
-  padding-left: 44px;
-}
-
-/* 折叠后顶部的展开按钮 */
-.rail-expand {
-  position: fixed;
-  top: 14px;
-  left: 14px;
-  z-index: 30;
+.shell--collapsed .rail-head .brand-text {
   display: none;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--paper);
-  color: var(--mute);
-  cursor: pointer;
 }
 
-.rail-expand:hover {
-  color: var(--ink);
-  border-color: var(--accent-line);
+.shell--collapsed .rail-toggle-btn {
+  position: static;
+  transform: none;
+  margin: 0 auto;
 }
 
-.shell--collapsed .rail-expand {
-  display: grid;
+.shell--collapsed .rail-scroll {
+  padding: 0 6px;
 }
 
-/* collapsed 时 rail 占位为 0，让全屏页面（如 graph）能贴到屏幕左边 */
+.shell--collapsed .rail-group,
+.shell--collapsed .rail-toggle,
+.shell--collapsed .thread-list {
+  display: none !important;
+}
+
+.shell--collapsed .nav,
+.shell--collapsed .thread-list {
+  align-items: center;
+  gap: 4px;
+}
+
+.shell--collapsed .nav-item,
+.shell--collapsed .thread-row {
+  justify-content: center;
+  padding: 8px;
+  gap: 0;
+  width: 100%;
+}
+
+.shell--collapsed .nav-item > span:not(.nav-ico),
+.shell--collapsed .nav-item .count-pill,
+.shell--collapsed .nav-item .nav-sub,
+.shell--collapsed .thread-row .thread-title,
+.shell--collapsed .thread-row .thread-meta,
+.shell--collapsed .thread-row .thread-kind {
+  display: none;
+}
+
+.shell--collapsed .nav-item .nav-ico {
+  margin: 0;
+  width: 16px;
+  height: 16px;
+}
+
+.shell--collapsed .thread-row .thread-ico {
+  display: inline-block;
+}
+
+.shell--collapsed .rail-foot .nav-item {
+  justify-content: center;
+}
+
+/* 折叠后顶部的展开按钮 —— 折叠态改为窄图标栏后，改用栏内折叠按钮展开，此处隐藏 */
+.rail-expand {
+  display: none !important;
+}
+
+/* collapsed 时 rail 收成窄图标列，不影响主区布局 */
 .shell--collapsed {
-  --rail-w: 0px;
+  --rail-w: 56px;
 }
 
 /* ---------- 紧凑会话列表（ThreadRow 风格） ---------- */
@@ -1827,11 +1943,17 @@ details.fold .fold-body {
   margin: 4px 0 0;
 }
 
+.thread-empty {
+  padding: 6px 8px;
+  font-size: 12px;
+  color: var(--faint);
+}
+
 .thread-row {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   padding: 6px 8px;
   border-radius: 8px;
   cursor: pointer;
@@ -1847,6 +1969,28 @@ details.fold .fold-body {
 .thread-row.is-on {
   background: var(--hover);
   color: var(--ink);
+}
+
+.thread-row .thread-kind {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--mute);
+  background: var(--surface-2, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--line);
+}
+
+.thread-row .thread-kind[data-kind="interview"] {
+  color: var(--accent, #9bd0ff);
+}
+
+.thread-row .thread-kind[data-kind="agent"] {
+  color: var(--ok, #8be9a4);
 }
 
 .thread-row .thread-title {
@@ -2224,10 +2368,6 @@ details.fold .fold-body {
   transition: width 0.32s ease;
 }
 
-/* ---------- 折叠后整体过渡 ---------- */
-.rail,
-.main-inner {
-  transition: flex-basis 0.32s cubic-bezier(0.4, 0, 0.2, 1),
-    width 0.32s cubic-bezier(0.4, 0, 0.2, 1),
-    padding 0.24s ease;
-}
+/* ---------- 折叠后整体过渡 ----------
+   - .rail 瞬时切换：避免主区内容被"挤压居中"造成中间帧画面
+   - .main / .main-inner / .main-stack 同步瞬时跟随，layout 不抖动 */

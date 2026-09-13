@@ -2,27 +2,23 @@
   <header class="topbar">
     <button class="icon-btn menu-btn" title="菜单" @click="emit('toggle-rail')">☰</button>
 
-    <div class="crumbs">
-      <router-link to="/">MemoAgent</router-link>
-      <span>/</span>
-      <b>{{ crumb }}</b>
-    </div>
-
-    <!-- Interview / Agent 路由下显示可点击重命名的聊天标题栏 -->
-    <div v-if="titleEditable" class="chat-title-bar">
-      <template v-if="editing">
-        <div class="chat-title-form">
-          <input ref="titleInput" v-model="draft" @keydown.enter="commit" @keydown.esc="cancel" />
-          <button class="btn sm" @click="cancel">取消</button>
-          <button class="btn sm primary" @click="commit">保存</button>
-        </div>
-      </template>
-      <button v-else class="chat-title-btn" @click="startEdit" :title="title">
-        <span>{{ title }}</span>
-        <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true">
-          <path d="M2 14l2-1 8-8-1-1-8 8zM10 3l3 3" stroke="currentColor" fill="none" stroke-width="1.4" />
-        </svg>
-      </button>
+    <div class="topbar-spacer">
+      <!-- Interview / Agent 路由下显示可点击重命名的聊天标题栏 -->
+      <div v-if="titleEditable" class="chat-title-bar">
+        <template v-if="editing">
+          <div class="chat-title-form">
+            <input ref="titleInput" v-model="draft" @keydown.enter="commit" @keydown.esc="cancel" />
+            <button class="btn sm" @click="cancel">取消</button>
+            <button class="btn sm primary" @click="commit">保存</button>
+          </div>
+        </template>
+        <button v-else class="chat-title-btn" @click="startEdit" :title="title">
+          <span>{{ title }}</span>
+          <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M2 14l2-1 8-8-1-1-8 8zM10 3l3 3" stroke="currentColor" fill="none" stroke-width="1.4" />
+          </svg>
+        </button>
+      </div>
     </div>
 
     <span class="spacer" />
@@ -53,8 +49,6 @@ const keyword = ref("");
 const editing = ref(false);
 const draft = ref("");
 const titleInput = ref<HTMLInputElement | null>(null);
-
-const crumb = computed(() => (route.meta.crumb as string | undefined) ?? "首页");
 
 const liveTitle = computed(() => {
   if (!props.titleEditable) return props.title ?? "";

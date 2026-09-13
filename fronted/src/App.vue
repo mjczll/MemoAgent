@@ -7,15 +7,16 @@
       @navigate="closeRail"
       @toggle-collapse="toggleCollapse"
     />
-    <button v-if="railCollapsed" class="rail-expand" title="展开侧栏" @click="toggleCollapse">☰</button>
     <div v-if="railOpen && !railCollapsed" class="scrim" @click="closeRail" />
 
     <main class="main">
       <AppTopbar @toggle-rail="toggleMobile" :title="titleLabel" :title-editable="titleEditable" />
-      <div class="main-inner" :class="innerClass">
-        <router-view v-slot="{ Component }">
-          <component :is="Component" />
-        </router-view>
+      <div class="main-inner">
+        <div class="main-stack" :class="innerClass">
+          <router-view v-slot="{ Component }">
+            <component :is="Component" />
+          </router-view>
+        </div>
       </div>
     </main>
 

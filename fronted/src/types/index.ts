@@ -46,6 +46,26 @@ export interface ChatMessage {
   action?: "generate-diary";
 }
 
+/** 历史采访会话（侧栏"最近会话"列表 + 切换/恢复） */
+export interface InterviewSession {
+  id: string;
+  /** 第一步回答的简短概括，用于列表标题 */
+  title: string;
+  /** 主题标签 */
+  topic: string;
+  /** 已完成步骤数 */
+  stepIndex: number;
+  /** 草稿是否已保存 */
+  finished: boolean;
+  updatedAt: string;
+  /** 完整快照，用于切换回该会话 */
+  snapshot: {
+    messages: ChatMessage[];
+    answers: string[];
+    draft: DiaryDraft | null;
+  };
+}
+
 /** 日记 */
 export interface Diary {
   id: string;
