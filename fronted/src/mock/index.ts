@@ -1,6 +1,5 @@
 export { DOMAINS, DOMAIN_NAMES, type DomainMeta } from "./domains";
 export { SEED_KNOWLEDGE } from "./knowledge";
-export { SEED_DIARIES } from "./diaries";
 export { SEED_EXPERIENCES } from "./experiences";
 export {
   INTERVIEW_STEPS,

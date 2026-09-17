@@ -137,6 +137,7 @@ import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import ChatMessage from "@/components/chat/ChatMessage.vue";
 import ModalDialog from "@/components/base/ModalDialog.vue";
+import { errorMessage } from "@/api/http";
 import { INTERVIEW_STEPS } from "@/mock";
 import { useInterviewStore } from "@/stores/interview";
 import { useLibraryStore } from "@/stores/library";
@@ -209,16 +210,20 @@ function regenerate() {
   if (store.regenerateDraft()) ui.toast("已按最新回答重新整理草稿");
 }
 
-function save() {
+async function save() {
   const draft = store.draft;
   if (!draft) return;
-  const created = library.saveDraft(draft);
-  store.markDraftSaved(created.diaryId);
-  showDraft.value = false;
-  ui.toast(
-    `已生成日记，并沉淀 1 张经验卡${created.newKnowledgeIds.length ? `、新建 ${created.newKnowledgeIds.length} 条知识` : ""}`,
-  );
-  router.push(`/diaries/${created.diaryId}`);
+  try {
+    const created = await library.saveDraft(draft);
+    store.markDraftSaved(created.diaryId);
+    showDraft.value = false;
+    ui.toast(
+      `已生成日记，并沉淀 1 张经验卡${created.newKnowledgeIds.length ? `、新建 ${created.newKnowledgeIds.length} 条知识` : ""}`,
+    );
+    router.push(`/diaries/${created.diaryId}`);
+  } catch (error) {
+    ui.toast(errorMessage(error, "保存日记失败"), "error");
+  }
 }
 
 function restart() {

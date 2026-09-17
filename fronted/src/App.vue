@@ -75,7 +75,7 @@ watch(
 
 onMounted(() => {
   useUiStore().hydrate();
-  useLibraryStore().hydrate();
+  void useLibraryStore().hydrate();
   useInterviewStore().hydrate();
   useAgentStore().hydrate();
 });

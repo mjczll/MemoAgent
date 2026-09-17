@@ -1,5 +1,9 @@
 <template>
-  <div v-if="diary" class="fade-in">
+  <div v-if="loading" class="fade-in">
+    <EmptyState icon="📔" title="正在打开日记" hint="正在从后端读取这篇记录。" />
+  </div>
+
+  <div v-else-if="diary" class="fade-in">
     <span class="crumb" @click="router.push('/diaries')">← 返回日记列表</span>
 
     <div class="detail-head">
@@ -19,7 +23,7 @@
         </div>
         <div class="row">
           <button class="btn sm" @click="router.push(`/diaries/${diary.id}/edit`)">编辑</button>
-          <button class="btn sm danger" @click="confirmDelete = true">删除</button>
+          <button class="btn sm danger" :disabled="removing" @click="confirmDelete = true">删除</button>
         </div>
       </div>
     </div>
@@ -95,12 +99,14 @@
 
     <ModalDialog v-model="confirmDelete" title="删除这篇日记？" width="460px">
       <p class="small" style="margin: 0">
-        将删除《{{ diary.title }}》，同时移除由它提炼出的经验卡（关联知识条目会保留）。该操作不可撤销。
+        将删除《{{ diary.title }}》，同时移除由它提炼出的本地经验卡（关联知识条目会保留）。该操作不可撤销。
       </p>
       <template #foot>
         <div class="row" style="justify-content: flex-end; width: 100%">
           <button class="btn" @click="confirmDelete = false">取消</button>
-          <button class="btn danger" @click="removeDiary">确认删除</button>
+          <button class="btn danger" :disabled="removing" @click="removeDiary">
+            {{ removing ? "删除中…" : "确认删除" }}
+          </button>
         </div>
       </template>
     </ModalDialog>
@@ -112,8 +118,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { errorMessage } from "@/api/http";
 import EmptyState from "@/components/base/EmptyState.vue";
 import MarkdownView from "@/components/base/MarkdownView.vue";
 import ModalDialog from "@/components/base/ModalDialog.vue";
@@ -122,6 +129,7 @@ import { relative } from "@/lib/format";
 import { extractWikiLinks } from "@/lib/markdown";
 import { useLibraryStore } from "@/stores/library";
 import { useUiStore } from "@/stores/ui";
+import type { Diary } from "@/types";
 
 const route = useRoute();
 const router = useRouter();
@@ -129,22 +137,41 @@ const library = useLibraryStore();
 const ui = useUiStore();
 
 const confirmDelete = ref(false);
+const loading = ref(true);
+const removing = ref(false);
+const diary = ref<Diary | undefined>();
 
 const diaryId = computed(() => String(route.params.id ?? ""));
-const diary = computed(() => library.diaryById(diaryId.value));
-const experiences = computed(() => library.experiences.filter((e) => e.diaryId === diaryId.value));
+const experiences = computed(() => library.experiences.filter((item) => item.diaryId === diaryId.value));
 const knowledges = computed(() =>
-  library.knowledge.filter((k) => k.id && diary.value?.knowledgeIds.includes(k.id)),
+  library.knowledge.filter((item) => item.id && diary.value?.knowledgeIds.includes(item.id)),
 );
 const wikiLinks = computed(() => (diary.value ? extractWikiLinks(diary.value.content) : []));
 
-function removeDiary() {
+watch(
+  diaryId,
+  async (id) => {
+    loading.value = true;
+    diary.value = id ? await library.fetchDiary(id) : undefined;
+    loading.value = false;
+  },
+  { immediate: true },
+);
+
+async function removeDiary() {
   const target = diary.value;
   if (!target) return;
-  library.deleteDiary(target.id);
-  confirmDelete.value = false;
-  ui.toast("日记与关联经验卡已删除", "warn");
-  router.push("/diaries");
+  removing.value = true;
+  try {
+    await library.deleteDiary(target.id);
+    confirmDelete.value = false;
+    ui.toast("日记已删除", "warn");
+    router.push("/diaries");
+  } catch (error) {
+    ui.toast(errorMessage(error, "删除失败"), "error");
+  } finally {
+    removing.value = false;
+  }
 }
 
 function searchTag(tag: string) {

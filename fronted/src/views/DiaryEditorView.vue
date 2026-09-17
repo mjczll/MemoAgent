@@ -8,11 +8,12 @@
           手动记录适合补充采访之外的日常；保存后会出现在日记列表，并可继续沉淀为知识。
         </p>
       </div>
-      <button class="btn" @click="router.back()">取消</button>
-      <button class="btn primary" :disabled="!form.title.trim() || !form.content.trim()" @click="save">
-        保存
+      <button type="button" class="btn" @click="router.back()">取消</button>
+      <button type="button" class="btn primary" :disabled="!canSave" @click="save">
+        {{ saving ? "保存中…" : "保存" }}
       </button>
     </div>
+    <p v-if="saveError" class="small" style="color: var(--danger, #e66); margin: -8px 0 12px">{{ saveError }}</p>
 
     <div class="split">
       <div class="panel">
@@ -44,8 +45,8 @@
             </div>
             <div class="field">
               <label>类型</label>
-              <select v-model="form.kind" class="select">
-                <option v-for="k in KINDS" :key="k" :value="k">{{ k }}</option>
+              <select v-model="form.kind" class="select" :disabled="!kindOptions.length">
+                <option v-for="k in kindOptions" :key="k" :value="k">{{ k }}</option>
               </select>
             </div>
             <div class="field">
@@ -76,22 +77,31 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { errorMessage } from "@/api/http";
 import MarkdownView from "@/components/base/MarkdownView.vue";
 import { todayISO } from "@/lib/format";
 import { useLibraryStore } from "@/stores/library";
 import { useUiStore } from "@/stores/ui";
-import { DIARY_KINDS, type DiaryKind } from "@/types";
+import type { DiaryKind } from "@/types";
 
 const route = useRoute();
 const router = useRouter();
 const library = useLibraryStore();
 const ui = useUiStore();
 
-const KINDS: DiaryKind[] = DIARY_KINDS;
-
+const saving = ref(false);
+const saveError = ref("");
 const isEdit = computed(() => route.name === "diary-edit");
+const kindOptions = computed(() => {
+  const names = library.diaryKinds.map((item) => item.name);
+  if (form.kind && !names.includes(form.kind)) return [form.kind, ...names];
+  return names;
+});
+const canSave = computed(
+  () => !saving.value && Boolean(form.title.trim() && form.content.trim() && form.kind),
+);
 
 const form = reactive({
   title: "",
@@ -102,9 +112,13 @@ const form = reactive({
   content: "",
 });
 
-onMounted(() => {
-  if (!isEdit.value) return;
-  const diary = library.diaryById(String(route.params.id ?? ""));
+onMounted(async () => {
+  await library.hydrate();
+  if (!isEdit.value) {
+    form.kind = library.defaultDiaryKind;
+    return;
+  }
+  const diary = await library.fetchDiary(String(route.params.id ?? ""));
   if (!diary) {
     ui.toast("找不到要编辑的日记", "error");
     router.replace("/diaries");
@@ -118,38 +132,46 @@ onMounted(() => {
   form.content = diary.content;
 });
 
-function save() {
+async function save() {
+  if (!canSave.value) return;
   const tags = form.tagsText
     .split(/[,，、\s]+/)
-    .map((t) => t.trim())
+    .map((item) => item.trim())
     .filter(Boolean);
   const summary = form.summary.trim() || form.content.replace(/[#>*`\-\n]/g, " ").trim().slice(0, 60);
-
-  if (isEdit.value) {
-    const id = String(route.params.id);
-    library.updateDiary(id, {
+  saving.value = true;
+  saveError.value = "";
+  try {
+    if (isEdit.value) {
+      const id = String(route.params.id);
+      await library.updateDiary(id, {
+        title: form.title.trim(),
+        date: form.date,
+        kind: form.kind,
+        tags,
+        summary,
+        content: form.content,
+      });
+      ui.toast("日记已更新");
+      router.push(`/diaries/${id}`);
+      return;
+    }
+    const id = await library.createDiary({
       title: form.title.trim(),
       date: form.date,
       kind: form.kind,
       tags,
       summary,
       content: form.content,
+      origin: "manual",
     });
-    ui.toast("日记已更新");
+    ui.toast("日记已保存");
     router.push(`/diaries/${id}`);
-    return;
+  } catch (error) {
+    saveError.value = errorMessage(error, "保存失败");
+    ui.toast(saveError.value, "error");
+  } finally {
+    saving.value = false;
   }
-
-  const id = library.createDiary({
-    title: form.title.trim(),
-    date: form.date,
-    kind: form.kind,
-    tags,
-    summary,
-    content: form.content,
-    origin: "manual",
-  });
-  ui.toast("日记已保存");
-  router.push(`/diaries/${id}`);
 }
 </script>

@@ -16,10 +16,18 @@ export type DomainName =
 /** 内容可见性：私有 / 已公开到探索知识 */
 export type Visibility = "private" | "public";
 
-/** 日记类型（默认由 AI 自动判断，用户可修改） */
-export type DiaryKind = "日常" | "技术" | "项目" | "学习" | "问题" | "思考" | "复盘";
+/** 日记类型名称。候选由后端 / 设置页维护，不再写死。 */
+export type DiaryKind = string;
 
-/** 日记类型候选，顺序即筛选器展示顺序 */
+export interface DiaryKindItem {
+  id: string;
+  name: DiaryKind;
+  sortOrder: number;
+  isDefault: boolean;
+  diaryCount: number;
+}
+
+/** 内置默认类型，仅作后端尚未返回时的兜底 */
 export const DIARY_KINDS: DiaryKind[] = ["日常", "技术", "项目", "学习", "问题", "思考", "复盘"];
 
 /** 掌握程度 */
@@ -73,6 +81,7 @@ export interface Diary {
   /** ISO 日期 YYYY-MM-DD */
   date: string;
   kind: DiaryKind;
+  kindId?: string;
   tags: string[];
   /** 一句话摘要 */
   summary: string;
@@ -81,6 +90,8 @@ export interface Diary {
   visibility: Visibility;
   experienceIds: string[];
   knowledgeIds: string[];
+  experienceCount?: number;
+  knowledgeCount?: number;
   /** 来源：采访生成 / 手动记录 */
   origin: "interview" | "manual";
   createdAt: string;

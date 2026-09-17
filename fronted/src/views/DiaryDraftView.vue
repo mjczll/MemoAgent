@@ -106,6 +106,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { errorMessage } from "@/api/http";
 import EmptyState from "@/components/base/EmptyState.vue";
 import TagRow from "@/components/base/TagRow.vue";
 import { useInterviewStore } from "@/stores/interview";
@@ -127,19 +128,23 @@ function regenerate() {
   else ui.toast("回答还不够，先去采访现场聊完五步", "info");
 }
 
-function save() {
+async function save() {
   const target = store.draft;
   if (!target) return;
   if (target.saved && target.savedDiaryId) {
     router.push(`/diaries/${target.savedDiaryId}`);
     return;
   }
-  const created = library.saveDraft(target);
-  store.markDraftSaved(created.diaryId);
-  ui.toast(
-    `已生成日记，并沉淀 1 张经验卡${created.newKnowledgeIds.length ? `、新建 ${created.newKnowledgeIds.length} 条知识` : ""}`,
-  );
-  router.push(`/diaries/${created.diaryId}`);
+  try {
+    const created = await library.saveDraft(target);
+    store.markDraftSaved(created.diaryId);
+    ui.toast(
+      `已生成日记，并沉淀 1 张经验卡${created.newKnowledgeIds.length ? `、新建 ${created.newKnowledgeIds.length} 条知识` : ""}`,
+    );
+    router.push(`/diaries/${created.diaryId}`);
+  } catch (error) {
+    ui.toast(errorMessage(error, "保存日记失败"), "error");
+  }
 }
 
 function discard() {

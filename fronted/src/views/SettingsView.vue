@@ -4,10 +4,10 @@
       <div class="grow">
         <h1 class="h1">设置</h1>
         <p class="lede" style="margin-bottom: 0">
-          原型内的所有设置都保存在浏览器本地存储里，刷新后依然生效，不涉及任何后端请求。
+          日记已接入后端；个人资料、经验、知识仍保存在浏览器本地。
         </p>
       </div>
-      <span class="badge">Mock 数据 · 不连后端</span>
+      <span class="badge">日记已联调</span>
     </div>
 
     <div class="split left-wide">
@@ -80,8 +80,8 @@
             <button class="btn sm block" @click="resetSeed">恢复示例数据</button>
             <button class="btn sm block danger" @click="clearAll">清空本地数据</button>
             <p class="small faint" style="margin: 0">
-              「清空本地数据」会删除浏览器中保存的全部原型数据（日记 / 经验 / 知识 / 会话 / 设置），
-              刷新后回到初始示例状态，不涉及磁盘文件。
+              「清空本地数据」只清浏览器里的经验 / 知识 / 会话 / 设置，不会删除后端日记。
+              「恢复示例数据」同样只重置本地经验与知识。
             </p>
           </div>
         </div>
@@ -94,7 +94,7 @@
             </p>
             <p style="margin: 0">
               技术栈：Vue 3 + TypeScript + Vite + Pinia + vue-router；图谱由内联 SVG 绘制；
-              全部数据与 AI 回答均为本地 Mock。
+              日记列表 / 详情 / 编辑已对接后端；采访、经验、知识、Agent 仍为本地 Mock。
             </p>
           </div>
         </div>
@@ -148,10 +148,10 @@ function exportJson() {
   ui.toast("已导出当前浏览器数据");
 }
 
-function resetSeed() {
-  if (!window.confirm("恢复示例数据会覆盖本地已有的日记 / 经验 / 知识，确定继续吗？")) return;
-  library.resetToSeed();
-  ui.toast("已恢复为初始示例数据");
+async function resetSeed() {
+  if (!window.confirm("恢复示例数据会覆盖本地已有的经验 / 知识，日记仍以后端为准。确定继续吗？")) return;
+  await library.resetToSeed();
+  ui.toast("已恢复本地示例经验 / 知识");
 }
 
 function clearAll() {

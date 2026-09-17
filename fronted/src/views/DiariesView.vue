@@ -24,11 +24,16 @@
 
     <div class="panel">
       <div class="panel-head">
-        <b>共 {{ list.length }} 篇</b>
+        <b>共 {{ total }} 篇</b>
         <span class="spacer" />
-        <span class="small faint">点击任意一条进入详情</span>
+        <span class="small faint">{{ loading ? "正在从后端加载…" : "点击任意一条进入详情" }}</span>
       </div>
-      <div class="list">
+      <div v-if="error" class="panel-body">
+        <EmptyState icon="⚠" title="日记加载失败" :hint="error">
+          <button class="btn primary sm" @click="load">重试</button>
+        </EmptyState>
+      </div>
+      <div v-else class="list">
         <div
           v-for="item in list"
           :key="item.id"
@@ -43,30 +48,31 @@
           <div class="meta">
             <span>{{ item.date }}</span>
             <span>{{ relative(item.createdAt) }}</span>
-            <span>经验 {{ item.experienceIds.length }} · 知识 {{ item.knowledgeIds.length }}</span>
+            <span>经验 {{ item.experienceCount ?? item.experienceIds.length }} · 知识 {{ item.knowledgeCount ?? item.knowledgeIds.length }}</span>
           </div>
           <div class="desc">{{ item.summary }}</div>
         </div>
       </div>
       <EmptyState
-        v-if="!list.length"
+        v-if="!loading && !error && !list.length"
         icon="📔"
         title="还没有匹配的日记"
-        hint="换个关键词或类型筛选，也可以直接让 AI 采访你一次。"
+        hint="换个关键词或类型筛选，也可以直接写一篇。"
       >
-        <button class="btn primary sm" @click="router.push('/interview')">开始采访</button>
+        <button class="btn primary sm" @click="router.push('/diaries/new')">写日记</button>
       </EmptyState>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
+import { errorMessage } from "@/api/http";
 import EmptyState from "@/components/base/EmptyState.vue";
 import KindTabs from "@/components/base/KindTabs.vue";
 import { relative } from "@/lib/format";
-import { DIARY_KINDS } from "@/types";
+import type { Diary } from "@/types";
 import { useLibraryStore } from "@/stores/library";
 
 const router = useRouter();
@@ -75,32 +81,75 @@ const library = useLibraryStore();
 const keyword = ref("");
 const kind = ref("all");
 const sort = ref<"desc" | "asc">("desc");
-
-const KINDS = DIARY_KINDS;
+const list = ref<Diary[]>([]);
+const total = ref(0);
+const loading = ref(false);
+const error = ref("");
+let debounce: number | undefined;
 
 const stats = computed(() => library.stats);
 
 const kindOptions = computed(() => [
-  { value: "all", label: "全部", count: library.diaries.length },
-  ...KINDS.map((k) => ({
-    value: k,
-    label: k,
-    count: library.diaries.filter((d) => d.kind === k).length,
+  {
+    value: "all",
+    label: "全部",
+    count: library.diaryKinds.reduce((sum, item) => sum + item.diaryCount, 0) || library.diaries.length,
+  },
+  ...library.diaryKinds.map((item) => ({
+    value: item.name,
+    label: item.name,
+    count: item.diaryCount,
   })),
 ]);
 
-const list = computed(() => {
-  const q = keyword.value.trim().toLowerCase();
-  return library.diaries
-    .filter((d) => (kind.value === "all" ? true : d.kind === kind.value))
-    .filter((d) =>
-      !q
-        ? true
-        : d.title.toLowerCase().includes(q) ||
-          d.summary.toLowerCase().includes(q) ||
-          d.content.toLowerCase().includes(q) ||
-          d.tags.join(" ").toLowerCase().includes(q),
-    )
-    .sort((a, b) => (sort.value === "desc" ? (a.date < b.date ? 1 : -1) : a.date < b.date ? -1 : 1));
+async function load() {
+  loading.value = true;
+  error.value = "";
+  try {
+    const page = await library.queryDiaries({
+      keyword: keyword.value,
+      kind: kind.value,
+      sort: sort.value,
+      page: 1,
+      size: 100,
+    });
+    list.value = page.records;
+    total.value = page.total;
+  } catch (err) {
+    list.value = [];
+    total.value = 0;
+    error.value = errorMessage(err, "日记列表加载失败");
+  } finally {
+    loading.value = false;
+  }
+}
+
+function scheduleLoad() {
+  window.clearTimeout(debounce);
+  debounce = window.setTimeout(() => {
+    void load();
+  }, 280);
+}
+
+onMounted(async () => {
+  await library.hydrate();
+  void load();
+});
+
+watch(
+  () => library.diaryKinds.map((item) => item.name).join(","),
+  () => {
+    if (kind.value !== "all" && !library.diaryKinds.some((item) => item.name === kind.value)) {
+      kind.value = "all";
+    }
+  },
+);
+
+watch([kind, sort], () => {
+  void load();
+});
+
+watch(keyword, () => {
+  scheduleLoad();
 });
 </script>
