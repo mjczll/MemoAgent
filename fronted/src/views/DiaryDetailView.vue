@@ -99,7 +99,7 @@
 
     <ModalDialog v-model="confirmDelete" title="删除这篇日记？" width="460px">
       <p class="small" style="margin: 0">
-        将删除《{{ diary.title }}》，同时移除由它提炼出的本地经验卡（关联知识条目会保留）。该操作不可撤销。
+        将删除《{{ diary.title }}》，同时移除由它提炼出的经验卡（关联知识条目会保留）。该操作不可撤销。
       </p>
       <template #foot>
         <div class="row" style="justify-content: flex-end; width: 100%">

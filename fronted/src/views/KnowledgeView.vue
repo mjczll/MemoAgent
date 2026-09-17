@@ -8,7 +8,7 @@
           涵盖 {{ stats.domains }} 个领域。
         </p>
       </div>
-      <button class="btn primary" @click="openCreate">新建知识</button>
+      <button type="button" class="btn primary" @click="openCreate">新建知识</button>
     </div>
 
     <div class="toolbar" style="margin-bottom: 14px">
@@ -68,7 +68,7 @@
       title="没有匹配的知识条目"
       hint="换个关键词或领域试试，也可以手动新建一条。"
     >
-      <button class="btn primary sm" @click="openCreate">新建知识</button>
+      <button type="button" class="btn primary sm" @click="openCreate">新建知识</button>
     </EmptyState>
 
     <ModalDialog v-model="showCreate" title="新建知识条目" width="680px">
@@ -80,9 +80,13 @@
         <div class="row wrap">
           <div class="field grow" style="min-width: 180px">
             <label>领域</label>
-            <select v-model="createForm.domain" class="select">
-              <option v-for="d in DOMAIN_NAMES" :key="d" :value="d">{{ d }}</option>
-            </select>
+            <SuggestCombo
+              v-model="createForm.domain"
+              :options="knownDomains"
+              :maxlength="64"
+              placeholder="选择已有领域，或输入新领域"
+              aria-label="选择已有领域"
+            />
           </div>
           <div class="field grow" style="min-width: 180px">
             <label>分类</label>
@@ -101,7 +105,7 @@
       <template #foot>
         <div class="row" style="justify-content: flex-end; width: 100%">
           <button class="btn" @click="showCreate = false">取消</button>
-          <button class="btn primary" :disabled="!createForm.title.trim()" @click="create">保存</button>
+          <button class="btn primary" :disabled="!canCreate" @click="create">保存</button>
         </div>
       </template>
     </ModalDialog>
@@ -109,12 +113,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
+import { errorMessage } from "@/api/http";
 import EmptyState from "@/components/base/EmptyState.vue";
 import KindTabs from "@/components/base/KindTabs.vue";
 import ModalDialog from "@/components/base/ModalDialog.vue";
-import { DOMAIN_NAMES } from "@/mock";
+import SuggestCombo from "@/components/base/SuggestCombo.vue";
+import { collectDomains, normalizeDomain } from "@/lib/domain";
 import { relative } from "@/lib/format";
 import { useLibraryStore } from "@/stores/library";
 import { useUiStore } from "@/stores/ui";
@@ -133,22 +139,32 @@ const showCreate = ref(false);
 
 const createForm = reactive({
   title: "",
-  domain: DOMAIN_NAMES[0] ?? "Java",
+  domain: "",
   category: "",
   tagsText: "",
   content: "",
 });
 
 const stats = computed(() => library.stats);
+const knownDomains = computed(() => collectDomains(library.knowledge));
+const canCreate = computed(() => Boolean(createForm.title.trim() && createForm.domain.trim()));
 
-const domainOptions = computed(() => [
-  { value: "all", label: "全部领域", count: library.knowledge.length },
-  ...DOMAIN_NAMES.filter((d) => library.knowledge.some((k) => k.domain === d)).map((d) => ({
-    value: d,
-    label: d,
-    count: library.knowledge.filter((k) => k.domain === d).length,
-  })),
-]);
+const domainOptions = computed(() => {
+  const counts = new Map<string, number>();
+  for (const item of library.knowledge) {
+    const name = item.domain.trim();
+    if (!name) continue;
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  return [
+    { value: "all", label: "全部领域", count: library.knowledge.length },
+    ...knownDomains.value.map((name) => ({
+      value: name,
+      label: name,
+      count: counts.get(name) ?? 0,
+    })),
+  ];
+});
 
 const filtered = computed(() => {
   const q = keyword.value.trim().toLowerCase();
@@ -178,27 +194,40 @@ const groups = computed(() => {
 
 function openCreate() {
   createForm.title = "";
+  createForm.domain = "";
   createForm.category = "";
   createForm.tagsText = "";
   createForm.content = "";
   showCreate.value = true;
 }
 
-function create() {
+watch(knownDomains, (names) => {
+  if (domain.value !== "all" && !names.includes(domain.value)) {
+    domain.value = "all";
+  }
+});
+
+async function create() {
+  if (!canCreate.value) return;
   const tags = createForm.tagsText
     .split(/[,，、\s]+/)
     .map((t) => t.trim())
     .filter(Boolean);
-  const id = library.createKnowledge({
-    title: createForm.title.trim(),
-    domain: createForm.domain,
-    category: createForm.category.trim() || "未分类",
-    tags,
-    content: createForm.content.split("\n").slice(0, 1).join("") || "",
-    summary: createForm.content.trim().slice(0, 60),
-  });
-  showCreate.value = false;
-  ui.toast("知识条目已创建");
-  router.push(`/knowledge/${id}`);
+  const content = createForm.content.trim() || createForm.title.trim();
+  try {
+    const id = await library.createKnowledge({
+      title: createForm.title.trim(),
+      domain: normalizeDomain(createForm.domain),
+      category: createForm.category.trim() || "未分类",
+      tags,
+      content,
+      summary: content.slice(0, 60),
+    });
+    showCreate.value = false;
+    ui.toast("知识条目已创建");
+    router.push(`/knowledge/${id}`);
+  } catch (error) {
+    ui.toast(errorMessage(error, "创建失败"), "error");
+  }
 }
 </script>

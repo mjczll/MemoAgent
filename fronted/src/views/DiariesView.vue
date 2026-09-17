@@ -95,11 +95,13 @@ const kindOptions = computed(() => [
     label: "全部",
     count: library.diaryKinds.reduce((sum, item) => sum + item.diaryCount, 0) || library.diaries.length,
   },
-  ...library.diaryKinds.map((item) => ({
-    value: item.name,
-    label: item.name,
-    count: item.diaryCount,
-  })),
+  ...library.diaryKinds
+    .filter((item) => item.diaryCount > 0)
+    .map((item) => ({
+      value: item.name,
+      label: item.name,
+      count: item.diaryCount,
+    })),
 ]);
 
 async function load() {

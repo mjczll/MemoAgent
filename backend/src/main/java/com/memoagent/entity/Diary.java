@@ -30,8 +30,6 @@ public class Diary {
 
     private String kind;
 
-    private Long kindId;
-
     private String origin;
 
     @TableLogic

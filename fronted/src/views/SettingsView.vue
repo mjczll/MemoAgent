@@ -4,7 +4,7 @@
       <div class="grow">
         <h1 class="h1">设置</h1>
         <p class="lede" style="margin-bottom: 0">
-          日记已接入后端；个人资料、经验、知识仍保存在浏览器本地。
+          日记、经验、知识已接入后端；个人资料仍保存在浏览器本地。
         </p>
       </div>
       <span class="badge">日记已联调</span>
@@ -77,11 +77,11 @@
             </div>
 
             <button class="btn sm block" @click="exportJson">导出全部数据（JSON）</button>
-            <button class="btn sm block" @click="resetSeed">恢复示例数据</button>
-            <button class="btn sm block danger" @click="clearAll">清空本地数据</button>
+            <button class="btn sm block" @click="resetSeed">重新加载资产</button>
+            <button class="btn sm block danger" @click="clearAll">清空本地设置</button>
             <p class="small faint" style="margin: 0">
-              「清空本地数据」只清浏览器里的经验 / 知识 / 会话 / 设置，不会删除后端日记。
-              「恢复示例数据」同样只重置本地经验与知识。
+              「重新加载资产」会从后端再拉一遍日记 / 经验 / 知识。
+              「清空本地设置」只清浏览器里的会话和资料，不会删除后端数据。
             </p>
           </div>
         </div>
@@ -94,7 +94,7 @@
             </p>
             <p style="margin: 0">
               技术栈：Vue 3 + TypeScript + Vite + Pinia + vue-router；图谱由内联 SVG 绘制；
-              日记列表 / 详情 / 编辑已对接后端；采访、经验、知识、Agent 仍为本地 Mock。
+              日记 / 经验 / 知识已对接后端；采访、关系图谱、Agent 仍为本地计算或 Mock。
             </p>
           </div>
         </div>
@@ -149,9 +149,8 @@ function exportJson() {
 }
 
 async function resetSeed() {
-  if (!window.confirm("恢复示例数据会覆盖本地已有的经验 / 知识，日记仍以后端为准。确定继续吗？")) return;
   await library.resetToSeed();
-  ui.toast("已恢复本地示例经验 / 知识");
+  ui.toast("已从后端重新加载日记 / 经验 / 知识");
 }
 
 function clearAll() {

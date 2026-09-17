@@ -9,15 +9,24 @@ import {
   type DiaryQuery,
 } from "@/api/diary";
 import { listDiaryKinds } from "@/api/diaryKind";
+import {
+  createExperience as createExperienceApi,
+  getExperience,
+  listExperiences,
+  updateExperience as updateExperienceApi,
+} from "@/api/experience";
+import {
+  createKnowledge as createKnowledgeApi,
+  deleteKnowledge as deleteKnowledgeApi,
+  getKnowledge,
+  listKnowledge,
+  updateKnowledge as updateKnowledgeApi,
+} from "@/api/knowledge";
 import { errorMessage } from "@/api/http";
 import type { Diary, DiaryDraft, DiaryKindItem, Experience, Knowledge } from "@/types";
-import { SEED_EXPERIENCES, SEED_KNOWLEDGE } from "@/mock";
-import { nowStamp, todayISO, truncate, uid } from "@/lib/format";
+import { todayISO, truncate } from "@/lib/format";
 import { searchLibrary, type LibraryData, type LibraryHit } from "@/lib/search";
 import { buildGraph } from "@/lib/graph";
-
-const LS_KEY = "memoagent:library:v2";
-const LS_KEY_LEGACY = "memoagent:library:v1";
 
 interface LibraryState {
   diaries: Diary[];
@@ -29,39 +38,15 @@ interface LibraryState {
   diariesError: string | null;
 }
 
-function cloneLocalSeeds(): Pick<LibraryState, "experiences" | "knowledge"> {
-  return {
-    experiences: JSON.parse(JSON.stringify(SEED_EXPERIENCES)) as Experience[],
-    knowledge: JSON.parse(JSON.stringify(SEED_KNOWLEDGE)) as Knowledge[],
-  };
-}
-
-function readLocalAssets(): Pick<LibraryState, "experiences" | "knowledge"> {
-  const raw = localStorage.getItem(LS_KEY) ?? localStorage.getItem(LS_KEY_LEGACY);
-  if (!raw) return cloneLocalSeeds();
-  try {
-    const parsed = JSON.parse(raw) as Partial<Pick<LibraryState, "experiences" | "knowledge">>;
-    if (parsed.experiences?.length || parsed.knowledge?.length) {
-      return {
-        experiences: parsed.experiences ?? [],
-        knowledge: parsed.knowledge ?? [],
-      };
-    }
-  } catch {
-    /* 损坏的本地缓存回落到示例经验 / 知识 */
-  }
-  return cloneLocalSeeds();
-}
-
-function upsertDiary(list: Diary[], diary: Diary): Diary[] {
-  const index = list.findIndex((item) => item.id === diary.id);
-  if (index < 0) return [diary, ...list];
+function upsertById<T extends { id: string }>(list: T[], item: T): T[] {
+  const index = list.findIndex((row) => row.id === item.id);
+  if (index < 0) return [item, ...list];
   const next = list.slice();
-  next[index] = diary;
+  next[index] = item;
   return next;
 }
 
-/** 知识资产库：日记走后端，经验 / 知识阶段 1 仍本地持久化 */
+/** 知识资产库：日记 / 经验 / 知识均走后端 */
 export const useLibraryStore = defineStore("library", {
   state: (): LibraryState => ({
     diaries: [],
@@ -151,35 +136,19 @@ export const useLibraryStore = defineStore("library", {
       return state.knowledge.filter((k) => k.mastery !== "已掌握").slice(0, 5);
     },
     defaultDiaryKind(state): string {
-      return state.diaryKinds.find((item) => item.isDefault)?.name ?? state.diaryKinds[0]?.name ?? "技术";
+      return state.diaryKinds.find((item) => item.isDefault)?.name ?? state.diaryKinds[0]?.name ?? "";
     },
   },
 
   actions: {
     async hydrate() {
-      if (this.hydrated) {
-        await Promise.all([this.refreshDiaries(), this.refreshDiaryKinds()]);
-        return;
-      }
-      Object.assign(this, readLocalAssets());
       this.hydrated = true;
-      this.persist();
-      await Promise.all([this.refreshDiaries(), this.refreshDiaryKinds()]);
-    },
-
-    persist() {
-      try {
-        localStorage.setItem(
-          LS_KEY,
-          JSON.stringify({
-            experiences: this.experiences,
-            knowledge: this.knowledge,
-          }),
-        );
-        localStorage.removeItem(LS_KEY_LEGACY);
-      } catch {
-        /* 原型环境忽略写入失败 */
-      }
+      await Promise.all([
+        this.refreshDiaries(),
+        this.refreshDiaryKinds(),
+        this.refreshExperiences(),
+        this.refreshKnowledge(),
+      ]);
     },
 
     async refreshDiaryKinds() {
@@ -204,6 +173,24 @@ export const useLibraryStore = defineStore("library", {
       }
     },
 
+    async refreshExperiences() {
+      try {
+        const page = await listExperiences({ page: 1, size: 100 });
+        this.experiences = page.records;
+      } catch {
+        this.experiences = [];
+      }
+    },
+
+    async refreshKnowledge() {
+      try {
+        const page = await listKnowledge({ page: 1, size: 100 });
+        this.knowledge = page.records;
+      } catch {
+        this.knowledge = [];
+      }
+    },
+
     async queryDiaries(query: DiaryQuery): Promise<DiaryPage<Diary>> {
       return listDiaries(query);
     },
@@ -211,17 +198,35 @@ export const useLibraryStore = defineStore("library", {
     async fetchDiary(id: string): Promise<Diary | undefined> {
       try {
         const diary = await getDiary(id);
-        this.diaries = upsertDiary(this.diaries, diary);
+        this.diaries = upsertById(this.diaries, diary);
         return diary;
       } catch {
         return undefined;
       }
     },
 
+    async fetchExperience(id: string): Promise<Experience | undefined> {
+      try {
+        const experience = await getExperience(id);
+        this.experiences = upsertById(this.experiences, experience);
+        return experience;
+      } catch {
+        return undefined;
+      }
+    },
+
+    async fetchKnowledgeItem(id: string): Promise<Knowledge | undefined> {
+      try {
+        const knowledge = await getKnowledge(id);
+        this.knowledge = upsertById(this.knowledge, knowledge);
+        return knowledge;
+      } catch {
+        return undefined;
+      }
+    },
+
     async resetToSeed() {
-      Object.assign(this, cloneLocalSeeds());
-      this.persist();
-      await this.refreshDiaries();
+      await this.hydrate();
     },
 
     search(query: string, limit = 8): LibraryHit[] {
@@ -235,11 +240,6 @@ export const useLibraryStore = defineStore("library", {
     async saveDraft(
       draft: DiaryDraft,
     ): Promise<{ diaryId: string; experienceId: string; newKnowledgeIds: string[] }> {
-      const now = nowStamp();
-      const experienceId = uid("e");
-      const newKnowledgeIds: string[] = [];
-      const linkedKnowledgeIds: string[] = [];
-
       const diaryContent = [
         draft.content,
         "---",
@@ -260,70 +260,54 @@ export const useLibraryStore = defineStore("library", {
         tags: [...draft.tags],
       });
 
-      draft.suggestedKnowledge.forEach((suggestion) => {
-        if (suggestion.existingId) {
-          const existing = this.knowledge.find((k) => k.id === suggestion.existingId);
-          if (existing) {
-            if (!existing.sourceExperienceIds.includes(experienceId)) {
-              existing.sourceExperienceIds.push(experienceId);
-            }
-            existing.updatedAt = now;
-            linkedKnowledgeIds.push(existing.id);
-            return;
-          }
+      const existingIds: string[] = [];
+      const newKnowledge = draft.suggestedKnowledge.flatMap((suggestion) => {
+        if (suggestion.existingId && this.knowledge.some((item) => item.id === suggestion.existingId)) {
+          existingIds.push(suggestion.existingId);
+          return [];
         }
-        const knowledgeId = uid("k");
-        newKnowledgeIds.push(knowledgeId);
-        linkedKnowledgeIds.push(knowledgeId);
-        const newKnowledge: Knowledge = {
-          id: knowledgeId,
-          title: suggestion.title,
-          category: draft.tags[0] ?? "未分类",
-          domain: draft.tags[0] ?? "项目开发",
-          tags: [...draft.tags],
-          summary: truncate(draft.extraction.lesson, 60),
-          content: [
-            `## 问题\n\n${draft.extraction.problem}`,
-            `## 原因\n\n${draft.extraction.cause}`,
-            `## 解决方案\n\n${draft.extraction.solution}`,
-            `## 经验\n\n${draft.extraction.lesson}`,
-            `---\n\n*由日记《${draft.title}》于 ${todayISO()} 沉淀，待补充完善。*`,
-          ].join("\n\n"),
-          relatedIds: draft.suggestedKnowledge
-            .map((s) => s.existingId)
-            .filter((id): id is string => Boolean(id)),
-          sourceExperienceIds: [experienceId],
-          mastery: "待补充",
-          visibility: "private",
-          updatedAt: now,
-        };
-        this.knowledge.push(newKnowledge);
+        return [
+          {
+            title: suggestion.title,
+            category: draft.tags[0] ?? "未分类",
+            domain: draft.tags[0] ?? "项目开发",
+            summary: truncate(draft.extraction.lesson, 60),
+            content: [
+              `## 问题\n\n${draft.extraction.problem}`,
+              `## 原因\n\n${draft.extraction.cause}`,
+              `## 解决方案\n\n${draft.extraction.solution}`,
+              `## 经验\n\n${draft.extraction.lesson}`,
+              `---\n\n由日记《${draft.title}》于 ${todayISO()} 沉淀，待补充完善。`,
+            ].join("\n\n"),
+            tags: [...draft.tags],
+            relatedIds: draft.suggestedKnowledge
+              .map((item) => item.existingId)
+              .filter((id): id is string => Boolean(id)),
+          },
+        ];
       });
 
-      diary.experienceIds = [experienceId];
-      diary.knowledgeIds = linkedKnowledgeIds;
-      diary.experienceCount = 1;
-      diary.knowledgeCount = linkedKnowledgeIds.length;
-      this.diaries = upsertDiary(this.diaries, diary);
-
-      const experience: Experience = {
-        id: experienceId,
+      const experience = await createExperienceApi({
+        diaryId: diary.id,
         title: `${draft.title} —— 经验提炼`,
         problem: draft.extraction.problem,
         cause: draft.extraction.cause,
         solution: draft.extraction.solution,
         lesson: draft.extraction.lesson,
-        tags: [...draft.tags],
         domain: draft.tags[0] ?? "项目开发",
+        tags: [...draft.tags],
+        knowledgeIds: existingIds,
+        newKnowledge,
+      });
+
+      this.diaries = upsertById(this.diaries, diary);
+      this.experiences = upsertById(this.experiences, experience);
+      await Promise.all([this.refreshDiaryKinds(), this.refreshKnowledge(), this.refreshDiaries()]);
+      return {
         diaryId: diary.id,
-        knowledgeIds: linkedKnowledgeIds,
-        visibility: "private",
-        createdAt: now,
+        experienceId: experience.id,
+        newKnowledgeIds: experience.knowledgeIds.filter((id) => !existingIds.includes(id)),
       };
-      this.experiences.unshift(experience);
-      this.persist();
-      await this.refreshDiaryKinds();
-      return { diaryId: diary.id, experienceId, newKnowledgeIds };
     },
 
     async updateDiary(id: string, patch: Partial<Diary> & { title: string; content: string }) {
@@ -337,23 +321,44 @@ export const useLibraryStore = defineStore("library", {
         origin: patch.origin ?? current?.origin,
         tags: patch.tags ?? current?.tags,
       });
-      this.diaries = upsertDiary(this.diaries, diary);
+      this.diaries = upsertById(this.diaries, diary);
       await this.refreshDiaryKinds();
       return diary;
     },
 
-    updateKnowledge(id: string, patch: Partial<Knowledge>) {
-      const target = this.knowledge.find((k) => k.id === id);
-      if (!target) return;
-      Object.assign(target, patch, { updatedAt: nowStamp() });
-      this.persist();
+    async updateKnowledge(id: string, patch: Partial<Knowledge>) {
+      const current = this.knowledgeById(id);
+      if (!current) return;
+      const knowledge = await updateKnowledgeApi(id, {
+        title: patch.title ?? current.title,
+        content: patch.content ?? current.content,
+        summary: patch.summary ?? current.summary,
+        category: patch.category ?? current.category,
+        domain: patch.domain ?? current.domain,
+        mastery: patch.mastery ?? current.mastery,
+        tags: patch.tags ?? current.tags,
+        relatedIds: patch.relatedIds ?? current.relatedIds,
+        sourceExperienceIds: patch.sourceExperienceIds ?? current.sourceExperienceIds,
+      });
+      this.knowledge = upsertById(this.knowledge, knowledge);
+      return knowledge;
     },
 
-    updateExperience(id: string, patch: Partial<Experience>) {
-      const target = this.experiences.find((e) => e.id === id);
-      if (!target) return;
-      Object.assign(target, patch);
-      this.persist();
+    async updateExperience(id: string, patch: Partial<Experience>) {
+      const current = this.experienceById(id);
+      if (!current) return;
+      const experience = await updateExperienceApi(id, {
+        title: patch.title ?? current.title,
+        problem: patch.problem ?? current.problem,
+        cause: patch.cause ?? current.cause,
+        solution: patch.solution ?? current.solution,
+        lesson: patch.lesson ?? current.lesson,
+        domain: patch.domain ?? current.domain,
+        tags: patch.tags ?? current.tags,
+        knowledgeIds: patch.knowledgeIds ?? current.knowledgeIds,
+      });
+      this.experiences = upsertById(this.experiences, experience);
+      return experience;
     },
 
     async createDiary(input: Partial<Diary> & { title: string; content: string }): Promise<string> {
@@ -366,38 +371,54 @@ export const useLibraryStore = defineStore("library", {
         origin: input.origin ?? "manual",
         tags: input.tags ?? [],
       });
-      this.diaries = upsertDiary(this.diaries, diary);
+      this.diaries = upsertById(this.diaries, diary);
       await this.refreshDiaryKinds();
       return diary.id;
     },
 
-    createKnowledge(input: Partial<Knowledge> & { title: string; content: string }): string {
-      const id = uid("k");
-      const now = nowStamp();
-      this.knowledge.unshift({
-        id,
+    async createKnowledge(input: Partial<Knowledge> & { title: string; content: string }): Promise<string> {
+      const knowledge = await createKnowledgeApi({
         title: input.title,
+        content: input.content,
         category: input.category ?? "未分类",
         domain: input.domain ?? "项目开发",
         tags: input.tags ?? [],
         summary: input.summary ?? truncate(input.content, 60),
-        content: input.content,
         relatedIds: input.relatedIds ?? [],
         sourceExperienceIds: input.sourceExperienceIds ?? [],
         mastery: input.mastery ?? "待补充",
-        visibility: input.visibility ?? "private",
-        updatedAt: now,
       });
-      this.persist();
-      return id;
+      this.knowledge = upsertById(this.knowledge, knowledge);
+      return knowledge.id;
     },
 
     async deleteDiary(id: string) {
       await deleteDiaryApi(id);
       this.diaries = this.diaries.filter((d) => d.id !== id);
       this.experiences = this.experiences.filter((e) => e.diaryId !== id);
-      this.persist();
-      await this.refreshDiaryKinds();
+      await Promise.all([this.refreshDiaryKinds(), this.refreshExperiences()]);
+    },
+
+    async deleteKnowledge(id: string) {
+      await deleteKnowledgeApi(id);
+      this.knowledge = this.knowledge
+        .filter((item) => item.id !== id)
+        .map((item) => ({
+          ...item,
+          relatedIds: item.relatedIds.filter((relatedId) => relatedId !== id),
+        }));
+      this.experiences = this.experiences.map((item) => ({
+        ...item,
+        knowledgeIds: item.knowledgeIds.filter((knowledgeId) => knowledgeId !== id),
+      }));
+      this.diaries = this.diaries.map((item) => {
+        const knowledgeIds = (item.knowledgeIds ?? []).filter((knowledgeId) => knowledgeId !== id);
+        return {
+          ...item,
+          knowledgeIds,
+          knowledgeCount: knowledgeIds.length,
+        };
+      });
     },
   },
 });

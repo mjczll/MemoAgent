@@ -11,20 +11,29 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("diary_kind")
-public class DiaryKind {
+@TableName("experience")
+public class Experience {
 
     @TableId(type = IdType.AUTO)
     private Long id;
 
     private Long userId;
 
-    private String name;
+    private Long diaryId;
 
-    private Integer sortOrder;
+    private String title;
 
-    @TableField("is_default")
-    private Boolean defaultKind;
+    private String problem;
+
+    private String cause;
+
+    private String solution;
+
+    private String lesson;
+
+    private String domain;
+
+    private String visibility;
 
     @TableLogic
     private Integer deleted;

@@ -16,7 +16,7 @@ export type DomainName =
 /** 内容可见性：私有 / 已公开到探索知识 */
 export type Visibility = "private" | "public";
 
-/** 日记类型名称。候选由后端 / 设置页维护，不再写死。 */
+/** 日记类型名称。由已有日记聚合而来，没有对应日记则不存在。 */
 export type DiaryKind = string;
 
 export interface DiaryKindItem {
@@ -26,9 +26,6 @@ export interface DiaryKindItem {
   isDefault: boolean;
   diaryCount: number;
 }
-
-/** 内置默认类型，仅作后端尚未返回时的兜底 */
-export const DIARY_KINDS: DiaryKind[] = ["日常", "技术", "项目", "学习", "问题", "思考", "复盘"];
 
 /** 掌握程度 */
 export type Mastery = "已掌握" | "部分掌握" | "待补充";

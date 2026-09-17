@@ -17,7 +17,6 @@ public class DiaryDetailVO {
     private LocalDate date;
 
     private String kind;
-    private Long kindId;
     private String origin;
     private String summary;
     private String content;

@@ -17,7 +17,6 @@ public class DiaryListItemVO {
     private LocalDate date;
 
     private String kind;
-    private Long kindId;
     private String origin;
     private String summary;
     private List<String> tags;

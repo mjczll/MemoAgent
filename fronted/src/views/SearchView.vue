@@ -77,7 +77,7 @@
         <div class="panel-head"><b>换个入口</b></div>
         <div class="panel-body small stack" style="gap: 8px">
           <button class="btn sm block" @click="askAgent">让 Agent 直接回答这个问题</button>
-          <button class="btn sm block" @click="router.push('/graph')">去知识织网看关联</button>
+          <button class="btn sm block" @click="router.push('/graph')">去关系图谱看关联</button>
         </div>
       </div>
     </template>

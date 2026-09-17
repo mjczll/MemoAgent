@@ -7,7 +7,7 @@
           每张经验卡都是「问题 → 原因 → 解法 → 经验」的结构化结论，来自你自己的日记。
         </p>
       </div>
-      <button class="btn" @click="router.push('/graph')">在织网中查看</button>
+      <button class="btn" @click="router.push('/graph')">在关系图谱中查看</button>
     </div>
 
     <div class="toolbar" style="margin-bottom: 14px">

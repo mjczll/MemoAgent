@@ -4,20 +4,25 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.memoagent.common.CurrentUser;
+import com.memoagent.common.DiaryKinds;
 import com.memoagent.common.DiaryOrigins;
 import com.memoagent.common.Texts;
 import com.memoagent.dto.DiaryCreateRequest;
 import com.memoagent.dto.DiaryQuery;
 import com.memoagent.dto.DiaryUpdateRequest;
 import com.memoagent.entity.Diary;
-import com.memoagent.entity.DiaryKind;
+import com.memoagent.entity.DiaryExperience;
+import com.memoagent.entity.DiaryKnowledge;
 import com.memoagent.entity.DiaryTag;
+import com.memoagent.entity.Experience;
 import com.memoagent.entity.Tag;
 import com.memoagent.exception.BusinessException;
+import com.memoagent.mapper.DiaryExperienceMapper;
+import com.memoagent.mapper.DiaryKnowledgeMapper;
 import com.memoagent.mapper.DiaryMapper;
 import com.memoagent.mapper.DiaryTagMapper;
+import com.memoagent.mapper.ExperienceMapper;
 import com.memoagent.mapper.TagMapper;
-import com.memoagent.service.DiaryKindService;
 import com.memoagent.service.DiaryService;
 import com.memoagent.vo.DiaryDetailVO;
 import com.memoagent.vo.DiaryListItemVO;
@@ -45,12 +50,13 @@ public class DiaryServiceImpl implements DiaryService {
     private final DiaryMapper diaryMapper;
     private final TagMapper tagMapper;
     private final DiaryTagMapper diaryTagMapper;
-    private final DiaryKindService diaryKindService;
+    private final DiaryExperienceMapper diaryExperienceMapper;
+    private final DiaryKnowledgeMapper diaryKnowledgeMapper;
+    private final ExperienceMapper experienceMapper;
 
     @Override
     @Transactional
     public DiaryDetailVO create(DiaryCreateRequest request) {
-        DiaryKind kind = diaryKindService.requireByName(request.getKind());
         LocalDateTime now = LocalDateTime.now();
 
         Diary diary = new Diary();
@@ -59,8 +65,7 @@ public class DiaryServiceImpl implements DiaryService {
         diary.setContent(request.getContent());
         diary.setSummary(resolveSummary(request.getSummary(), request.getContent()));
         diary.setDiaryDate(request.getDate());
-        diary.setKind(kind.getName());
-        diary.setKindId(kind.getId());
+        diary.setKind(DiaryKinds.normalize(request.getKind()));
         diary.setOrigin(DiaryOrigins.normalize(request.getOrigin()));
         diary.setCreatedAt(now);
         diary.setUpdatedAt(now);
@@ -73,19 +78,12 @@ public class DiaryServiceImpl implements DiaryService {
     @Override
     public PageData<DiaryListItemVO> list(DiaryQuery query) {
         normalizeQuery(query);
-        DiaryKind kindFilter = null;
-        if (StringUtils.hasText(query.getKind()) && !"all".equalsIgnoreCase(query.getKind())) {
-            kindFilter = diaryKindService.requireByName(query.getKind());
-        }
-
         Page<Diary> page = new Page<>(query.getPage(), query.getSize());
         boolean asc = "asc".equalsIgnoreCase(query.getSort());
         LambdaQueryWrapper<Diary> wrapper = Wrappers.lambdaQuery();
         wrapper.eq(Diary::getUserId, CurrentUser.id());
-        if (kindFilter != null) {
-            Long kindId = kindFilter.getId();
-            String kindName = kindFilter.getName();
-            wrapper.and(item -> item.eq(Diary::getKindId, kindId).or().eq(Diary::getKind, kindName));
+        if (StringUtils.hasText(query.getKind()) && !"all".equalsIgnoreCase(query.getKind())) {
+            wrapper.eq(Diary::getKind, query.getKind().trim());
         }
         if (StringUtils.hasText(query.getKeyword())) {
             String keyword = query.getKeyword().trim();
@@ -117,14 +115,11 @@ public class DiaryServiceImpl implements DiaryService {
     @Transactional
     public DiaryDetailVO update(Long id, DiaryUpdateRequest request) {
         Diary diary = requireOwned(id);
-        DiaryKind kind = diaryKindService.requireByName(request.getKind());
-
         diary.setTitle(request.getTitle().trim());
         diary.setContent(request.getContent());
         diary.setSummary(resolveSummary(request.getSummary(), request.getContent()));
         diary.setDiaryDate(request.getDate());
-        diary.setKind(kind.getName());
-        diary.setKindId(kind.getId());
+        diary.setKind(DiaryKinds.normalize(request.getKind()));
         if (request.getOrigin() != null) {
             diary.setOrigin(DiaryOrigins.normalize(request.getOrigin()));
         }
@@ -139,6 +134,11 @@ public class DiaryServiceImpl implements DiaryService {
     @Transactional
     public void delete(Long id) {
         requireOwned(id);
+        List<Experience> experiences = experienceMapper.selectList(
+                Wrappers.<Experience>lambdaQuery().eq(Experience::getDiaryId, id));
+        for (Experience experience : experiences) {
+            experienceMapper.deleteById(experience.getId());
+        }
         diaryMapper.deleteById(id);
     }
 
@@ -222,40 +222,68 @@ public class DiaryServiceImpl implements DiaryService {
     }
 
     private DiaryDetailVO toDetail(Diary diary, List<String> tags) {
+        List<Long> experienceIds = loadExperienceIds(List.of(diary.getId())).getOrDefault(diary.getId(), List.of());
+        List<Long> knowledgeIds = loadKnowledgeIds(List.of(diary.getId())).getOrDefault(diary.getId(), List.of());
         DiaryDetailVO vo = new DiaryDetailVO();
         vo.setId(diary.getId());
         vo.setTitle(diary.getTitle());
         vo.setDate(diary.getDiaryDate());
         vo.setKind(diary.getKind());
-        vo.setKindId(diary.getKindId());
         vo.setOrigin(diary.getOrigin());
         vo.setSummary(diary.getSummary());
         vo.setContent(diary.getContent());
         vo.setTags(tags);
         vo.setVisibility(PRIVATE);
-        vo.setExperienceCount(0);
-        vo.setKnowledgeCount(0);
-        vo.setExperienceIds(List.of());
-        vo.setKnowledgeIds(List.of());
+        vo.setExperienceCount(experienceIds.size());
+        vo.setKnowledgeCount(knowledgeIds.size());
+        vo.setExperienceIds(experienceIds);
+        vo.setKnowledgeIds(knowledgeIds);
         vo.setCreatedAt(diary.getCreatedAt());
         vo.setUpdatedAt(diary.getUpdatedAt());
         return vo;
     }
 
     private DiaryListItemVO toListItem(Diary diary, List<String> tags) {
+        List<Long> experienceIds = loadExperienceIds(List.of(diary.getId())).getOrDefault(diary.getId(), List.of());
+        List<Long> knowledgeIds = loadKnowledgeIds(List.of(diary.getId())).getOrDefault(diary.getId(), List.of());
         DiaryListItemVO vo = new DiaryListItemVO();
         vo.setId(diary.getId());
         vo.setTitle(diary.getTitle());
         vo.setDate(diary.getDiaryDate());
         vo.setKind(diary.getKind());
-        vo.setKindId(diary.getKindId());
         vo.setOrigin(diary.getOrigin());
         vo.setSummary(diary.getSummary());
         vo.setTags(tags);
         vo.setVisibility(PRIVATE);
-        vo.setExperienceCount(0);
-        vo.setKnowledgeCount(0);
+        vo.setExperienceCount(experienceIds.size());
+        vo.setKnowledgeCount(knowledgeIds.size());
         vo.setCreatedAt(diary.getCreatedAt());
         return vo;
+    }
+
+    private Map<Long, List<Long>> loadExperienceIds(List<Long> diaryIds) {
+        if (diaryIds.isEmpty()) {
+            return Map.of();
+        }
+        List<DiaryExperience> relations = diaryExperienceMapper.selectList(
+                Wrappers.<DiaryExperience>lambdaQuery().in(DiaryExperience::getDiaryId, diaryIds));
+        Map<Long, List<Long>> result = new LinkedHashMap<>();
+        for (DiaryExperience relation : relations) {
+            result.computeIfAbsent(relation.getDiaryId(), key -> new ArrayList<>()).add(relation.getExperienceId());
+        }
+        return result;
+    }
+
+    private Map<Long, List<Long>> loadKnowledgeIds(List<Long> diaryIds) {
+        if (diaryIds.isEmpty()) {
+            return Map.of();
+        }
+        List<DiaryKnowledge> relations = diaryKnowledgeMapper.selectList(
+                Wrappers.<DiaryKnowledge>lambdaQuery().in(DiaryKnowledge::getDiaryId, diaryIds));
+        Map<Long, List<Long>> result = new LinkedHashMap<>();
+        for (DiaryKnowledge relation : relations) {
+            result.computeIfAbsent(relation.getDiaryId(), key -> new ArrayList<>()).add(relation.getKnowledgeId());
+        }
+        return result;
     }
 }

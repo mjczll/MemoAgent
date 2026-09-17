@@ -2,18 +2,18 @@ import { request } from "./http";
 import type { DiaryKindItem } from "@/types";
 
 interface DiaryKindDto {
-  id: number | string;
+  id?: number | string;
   name: string;
-  sortOrder: number;
-  isDefault: boolean;
+  sortOrder?: number;
+  isDefault?: boolean;
   diaryCount?: number;
 }
 
 function toItem(dto: DiaryKindDto): DiaryKindItem {
   return {
-    id: String(dto.id),
+    id: String(dto.id ?? dto.name),
     name: dto.name,
-    sortOrder: dto.sortOrder,
+    sortOrder: dto.sortOrder ?? 0,
     isDefault: Boolean(dto.isDefault),
     diaryCount: dto.diaryCount ?? 0,
   };

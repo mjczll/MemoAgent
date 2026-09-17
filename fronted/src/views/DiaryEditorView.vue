@@ -45,9 +45,13 @@
             </div>
             <div class="field">
               <label>类型</label>
-              <select v-model="form.kind" class="select" :disabled="!kindOptions.length">
-                <option v-for="k in kindOptions" :key="k" :value="k">{{ k }}</option>
-              </select>
+              <SuggestCombo
+                v-model="form.kind"
+                :options="kindOptions"
+                :maxlength="32"
+                placeholder="选择已有类型，或输入新类型"
+                aria-label="选择已有类型"
+              />
             </div>
             <div class="field">
               <label>标签（逗号分隔）</label>
@@ -81,6 +85,8 @@ import { computed, onMounted, reactive, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { errorMessage } from "@/api/http";
 import MarkdownView from "@/components/base/MarkdownView.vue";
+import SuggestCombo from "@/components/base/SuggestCombo.vue";
+import { normalizeKind } from "@/lib/kind";
 import { todayISO } from "@/lib/format";
 import { useLibraryStore } from "@/stores/library";
 import { useUiStore } from "@/stores/ui";
@@ -94,19 +100,15 @@ const ui = useUiStore();
 const saving = ref(false);
 const saveError = ref("");
 const isEdit = computed(() => route.name === "diary-edit");
-const kindOptions = computed(() => {
-  const names = library.diaryKinds.map((item) => item.name);
-  if (form.kind && !names.includes(form.kind)) return [form.kind, ...names];
-  return names;
-});
+const kindOptions = computed(() => library.diaryKinds.map((item) => item.name));
 const canSave = computed(
-  () => !saving.value && Boolean(form.title.trim() && form.content.trim() && form.kind),
+  () => !saving.value && Boolean(form.title.trim() && form.content.trim() && form.kind.trim()),
 );
 
 const form = reactive({
   title: "",
   date: todayISO(),
-  kind: "技术" as DiaryKind,
+  kind: "" as DiaryKind,
   tagsText: "",
   summary: "",
   content: "",
@@ -114,10 +116,7 @@ const form = reactive({
 
 onMounted(async () => {
   await library.hydrate();
-  if (!isEdit.value) {
-    form.kind = library.defaultDiaryKind;
-    return;
-  }
+  if (!isEdit.value) return;
   const diary = await library.fetchDiary(String(route.params.id ?? ""));
   if (!diary) {
     ui.toast("找不到要编辑的日记", "error");
@@ -147,7 +146,7 @@ async function save() {
       await library.updateDiary(id, {
         title: form.title.trim(),
         date: form.date,
-        kind: form.kind,
+        kind: normalizeKind(form.kind),
         tags,
         summary,
         content: form.content,
@@ -159,7 +158,7 @@ async function save() {
     const id = await library.createDiary({
       title: form.title.trim(),
       date: form.date,
-      kind: form.kind,
+      kind: normalizeKind(form.kind),
       tags,
       summary,
       content: form.content,

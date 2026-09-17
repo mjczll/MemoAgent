@@ -71,13 +71,13 @@ const routes: RouteRecordRaw[] = [
     path: "/graph",
     name: "graph",
     component: () => import("@/views/GraphView.vue"),
-    meta: { title: "知识织网", crumb: "知识织网" },
+    meta: { title: "关系图谱", crumb: "关系图谱" },
   },
   {
     path: "/graph/local/:id",
     name: "graph-local",
     component: () => import("@/views/GraphView.vue"),
-    meta: { title: "局部关系图", crumb: "知识织网 / 局部图" },
+    meta: { title: "局部关系图", crumb: "关系图谱 / 局部图" },
   },
   {
     path: "/agent",

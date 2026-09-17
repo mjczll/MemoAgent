@@ -101,7 +101,7 @@ const assetNav = computed<NavItem[]>(() => [
   { to: "/diaries", label: "日记", icon: "diary" },
   { to: "/experiences", label: "经验", icon: "experience" },
   { to: "/knowledge", label: "知识库", icon: "knowledge" },
-  { to: "/graph", label: "知识织网", icon: "graph" },
+  { to: "/graph", label: "关系图谱", icon: "graph" },
 ]);
 
 function isActive(item: { to: string }): boolean {

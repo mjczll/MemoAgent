@@ -144,7 +144,7 @@ select {
   position: relative;
   height: 100%;
   min-height: 100%;
-  background: var(--paper);
+  background: transparent;
   --topbar-h: 41px;
   --main-pad-y: 18px;
   --main-pad-x: 24px;
@@ -382,7 +382,7 @@ select {
   height: 100%;
   overflow-y: auto;
   position: relative;
-  background: var(--paper);
+  background: transparent;
   /* 主区占满整个 shell 宽度（不减去 rail 宽度，rail 是 absolute 浮在上面） */
   padding-left: var(--rail-w);
   transition: padding-left 0.28s cubic-bezier(0.4, 0, 0.2, 1);
@@ -1240,7 +1240,7 @@ select {
 .field-bg {
   position: fixed;
   inset: 0;
-  z-index: 1;
+  z-index: 8;
   pointer-events: none;
   overflow: hidden;
   /* 让雪花分布更均匀 */
@@ -1254,6 +1254,7 @@ select {
 .snowflake {
   position: absolute;
   top: -16px;
+  pointer-events: none;
   border-radius: 50%;
   background: #ffffff;
   /* 用阴影模拟光晕：双层 box-shadow 营造柔和发光 */
@@ -1292,13 +1293,6 @@ select {
   100% {
     transform: translate3d(calc(var(--drift, 8) * 1.6vw), 110vh, 0);
     opacity: 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .snowflake {
-    animation: none;
-    opacity: 0.55;
   }
 }
 
@@ -1480,6 +1474,55 @@ details.fold .fold-body {
   margin-top: 8px;
   font-size: 13.2px;
   color: var(--mute);
+}
+
+/* ---------- 弹层 ---------- */
+.modal-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.modal {
+  width: 100%;
+  max-height: min(82vh, 760px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-lg);
+  background: var(--paper-2);
+  box-shadow: var(--shadow);
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.modal-head b {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.modal-body {
+  padding: 14px;
+  overflow-y: auto;
+}
+
+.modal-foot {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px 14px;
+  border-top: 1px solid var(--line);
 }
 
 /* ---------- Toast ---------- */

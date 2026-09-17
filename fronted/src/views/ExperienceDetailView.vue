@@ -89,7 +89,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import EmptyState from "@/components/base/EmptyState.vue";
 import MarkdownView from "@/components/base/MarkdownView.vue";
@@ -103,8 +103,20 @@ const router = useRouter();
 const library = useLibraryStore();
 const ui = useUiStore();
 
-const item = computed(() => library.experienceById(String(route.params.id ?? "")));
+const itemId = computed(() => String(route.params.id ?? ""));
+const item = computed(() => library.experienceById(itemId.value));
 const diary = computed(() => (item.value ? library.diaryById(item.value.diaryId) : undefined));
+
+watch(
+  itemId,
+  async (id) => {
+    if (!id) return;
+    await library.fetchExperience(id);
+    const current = library.experienceById(id);
+    if (current?.diaryId) await library.fetchDiary(current.diaryId);
+  },
+  { immediate: true },
+);
 const knowledges = computed(() =>
   item.value ? library.knowledge.filter((k) => item.value?.knowledgeIds.includes(k.id)) : [],
 );

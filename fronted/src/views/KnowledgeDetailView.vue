@@ -18,7 +18,8 @@
           </div>
         </div>
         <div class="row">
-          <button class="btn sm" @click="openEdit">编辑</button>
+          <button type="button" class="btn sm" @click="openEdit">编辑</button>
+          <button type="button" class="btn sm danger" :disabled="removing" @click="confirmDelete = true">删除</button>
         </div>
       </div>
     </div>
@@ -121,6 +122,16 @@
           <input v-model="editForm.title" class="input" />
         </div>
         <div class="field">
+          <label>领域</label>
+          <SuggestCombo
+            v-model="editForm.domain"
+            :options="knownDomains"
+            :maxlength="64"
+            placeholder="选择已有领域，或输入新领域"
+            aria-label="选择已有领域"
+          />
+        </div>
+        <div class="field">
           <label>摘要</label>
           <input v-model="editForm.summary" class="input" />
         </div>
@@ -132,7 +143,21 @@
       <template #foot>
         <div class="row" style="justify-content: flex-end; width: 100%">
           <button class="btn" @click="showEdit = false">取消</button>
-          <button class="btn primary" @click="saveEdit">保存修改</button>
+          <button class="btn primary" :disabled="!editForm.title.trim() || !editForm.domain.trim()" @click="saveEdit">保存修改</button>
+        </div>
+      </template>
+    </ModalDialog>
+
+    <ModalDialog v-model="confirmDelete" title="删除这条知识？" width="460px">
+      <p class="small" style="margin: 0">
+        将删除《{{ item.title }}》。来源经验和日记会保留，只去掉和它的关联。该操作不可撤销。
+      </p>
+      <template #foot>
+        <div class="row" style="justify-content: flex-end; width: 100%">
+          <button type="button" class="btn" @click="confirmDelete = false">取消</button>
+          <button type="button" class="btn danger" :disabled="removing" @click="removeKnowledge">
+            {{ removing ? "删除中…" : "确认删除" }}
+          </button>
         </div>
       </template>
     </ModalDialog>
@@ -167,7 +192,10 @@ import EmptyState from "@/components/base/EmptyState.vue";
 import MarkdownView from "@/components/base/MarkdownView.vue";
 import ModalDialog from "@/components/base/ModalDialog.vue";
 import StackPath from "@/components/base/StackPath.vue";
+import SuggestCombo from "@/components/base/SuggestCombo.vue";
 import TagRow from "@/components/base/TagRow.vue";
+import { errorMessage } from "@/api/http";
+import { collectDomains, normalizeDomain } from "@/lib/domain";
 import { relative } from "@/lib/format";
 import { useLibraryStore } from "@/stores/library";
 import { useUiStore } from "@/stores/ui";
@@ -182,8 +210,11 @@ const MASTERIES: Mastery[] = ["已掌握", "部分掌握", "待补充"];
 
 const showEdit = ref(false);
 const showLink = ref(false);
+const confirmDelete = ref(false);
+const removing = ref(false);
 
-const editForm = reactive({ title: "", summary: "", content: "" });
+const editForm = reactive({ title: "", domain: "", summary: "", content: "" });
+const knownDomains = computed(() => collectDomains(library.knowledge));
 
 const itemId = computed(() => String(route.params.id ?? ""));
 const item = computed(() => library.knowledgeById(itemId.value));
@@ -229,14 +260,23 @@ watch(
   (value) => {
     if (!value) return;
     editForm.title = value.title;
+    editForm.domain = value.domain;
     editForm.summary = value.summary;
     editForm.content = value.content;
   },
   { immediate: true },
 );
 
-function setMastery(m: Mastery) {
-  library.updateKnowledge(itemId.value, { mastery: m });
+watch(
+  itemId,
+  async (id) => {
+    if (id) await library.fetchKnowledgeItem(id);
+  },
+  { immediate: true },
+);
+
+async function setMastery(m: Mastery) {
+  await library.updateKnowledge(itemId.value, { mastery: m });
   ui.toast(`已标记为「${m}」`);
 }
 
@@ -244,9 +284,10 @@ function openEdit() {
   showEdit.value = true;
 }
 
-function saveEdit() {
-  library.updateKnowledge(itemId.value, {
+async function saveEdit() {
+  await library.updateKnowledge(itemId.value, {
     title: editForm.title.trim(),
+    domain: normalizeDomain(editForm.domain),
     summary: editForm.summary.trim(),
     content: editForm.content,
   });
@@ -258,16 +299,32 @@ function openLink() {
   showLink.value = true;
 }
 
-function addLink(id: string) {
+async function addLink(id: string) {
   const current = item.value;
   if (!current) return;
-  library.updateKnowledge(current.id, { relatedIds: [...current.relatedIds, id] });
+  await library.updateKnowledge(current.id, { relatedIds: [...current.relatedIds, id] });
   const other = library.knowledgeById(id);
   if (other && !other.relatedIds.includes(current.id)) {
-    library.updateKnowledge(other.id, { relatedIds: [...other.relatedIds, current.id] });
+    await library.updateKnowledge(other.id, { relatedIds: [...other.relatedIds, current.id] });
   }
   showLink.value = false;
   ui.toast("已建立双向互链");
+}
+
+async function removeKnowledge() {
+  const target = item.value;
+  if (!target) return;
+  removing.value = true;
+  try {
+    await library.deleteKnowledge(target.id);
+    confirmDelete.value = false;
+    ui.toast("知识已删除", "warn");
+    router.push("/knowledge");
+  } catch (error) {
+    ui.toast(errorMessage(error, "删除失败"), "error");
+  } finally {
+    removing.value = false;
+  }
 }
 
 function searchTag(tag: string) {
