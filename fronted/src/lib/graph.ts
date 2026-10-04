@@ -98,9 +98,12 @@ export function buildGraph(
     });
   });
 
-  // 日记 → 经验：提炼
+  // 日记 → 经验：提炼。列表接口会带 experienceIds，经验上的 diaryId 再补一条，避免只连到一边。
   diaries.forEach((d) => {
     d.experienceIds.forEach((eid) => pushEdge(d.id, eid, "提炼"));
+  });
+  experiences.forEach((e) => {
+    if (e.diaryId) pushEdge(e.diaryId, e.id, "提炼");
   });
 
   // 经验 → 知识：沉淀
@@ -108,9 +111,13 @@ export function buildGraph(
     e.knowledgeIds.forEach((kid) => pushEdge(e.id, kid, "沉淀"));
   });
 
-  // 日记 → 知识：关联
+  // 日记 → 知识：关联。经验上已挂的知识也算到它所属的日记。
   diaries.forEach((d) => {
     d.knowledgeIds.forEach((kid) => pushEdge(d.id, kid, "关联"));
+  });
+  experiences.forEach((e) => {
+    if (!e.diaryId) return;
+    e.knowledgeIds.forEach((kid) => pushEdge(e.diaryId, kid, "关联"));
   });
 
   // 知识 ↔ 知识：相关

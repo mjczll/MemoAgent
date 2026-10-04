@@ -1,34 +1,31 @@
+# 开发版和发行版共用的配置。数据库、Redis、模型放在各自的 profile 文件里。
+# 未手动指定时：classpath 中有 application-dev.yml 就用 dev，否则用 prod。
+# 手动指定：SPRING_PROFILES_ACTIVE=dev 或 prod
+
 server:
+  # HTTP 端口
   port: 8080
 
 spring:
   application:
+    # 进程名，日志里会看到
     name: memo-agent
-  datasource:
-    url: jdbc:mysql://localhost:3307/memoagent?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
-    username: memoagent
-    password: memoagent
-  data:
-    redis:
-      host: localhost
-      port: 6379
   jackson:
+    # 接口里的时间按上海时区
     time-zone: Asia/Shanghai
     serialization:
+      # 日期输出成 2026-10-04T16:24:15，而不是时间戳数字
       write-dates-as-timestamps: false
 
 mybatis-plus:
   configuration:
+    # 表字段 user_id 对应 Java 的 userId
     map-underscore-to-camel-case: true
-    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
   global-config:
     db-config:
+      # 主键由数据库自增
       id-type: auto
+      # 带 deleted 字段的表做软删除，查询默认不带已删除行
       logic-delete-field: deleted
       logic-delete-value: 1
       logic-not-delete-value: 0
-
-logging:
-  level:
-    com.memoagent: info
-    com.memoagent.mapper: debug

@@ -4,3 +4,4 @@
 /docs/
 /backend/src/test/
 /.cursor/
+/backend/src/main/resources/application-dev.yml

@@ -31,8 +31,6 @@ import AppRail from "@/components/shell/AppRail.vue";
 import AppTopbar from "@/components/shell/AppTopbar.vue";
 import SnowFall from "@/components/base/SnowFall.vue";
 import ToastHost from "@/components/base/ToastHost.vue";
-import { useAgentStore } from "@/stores/agent";
-import { useInterviewStore } from "@/stores/interview";
 import { useLibraryStore } from "@/stores/library";
 import { useUiStore } from "@/stores/ui";
 
@@ -45,12 +43,12 @@ const innerClass = computed(() => {
   if (width === "wide") return "wide";
   if (width === "narrow") return "narrow";
   // Agent / 采访 / 图谱这类需要横向空间的页面给更宽的画布
-  if (["agent", "interview", "graph"].includes(String(route.name))) return "wide";
+  if (["conversation", "graph"].includes(String(route.name))) return "wide";
   return "";
 });
 
 const titleLabel = computed(() => (route.meta.crumb as string | undefined) ?? "首页");
-const titleEditable = computed(() => ["interview", "agent"].includes(String(route.name)));
+const titleEditable = computed(() => false);
 
 function toggleMobile() {
   railOpen.value = !railOpen.value;
@@ -76,8 +74,6 @@ watch(
 onMounted(() => {
   useUiStore().hydrate();
   void useLibraryStore().hydrate();
-  useInterviewStore().hydrate();
-  useAgentStore().hydrate();
 });
 </script>
 

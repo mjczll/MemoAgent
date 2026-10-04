@@ -4,14 +4,18 @@ const routes: RouteRecordRaw[] = [
   {
     path: "/",
     name: "home",
-    component: () => import("@/views/HomeView.vue"),
+    component: () => import("@/views/ConversationView.vue"),
     meta: { title: "首页", crumb: "首页" },
   },
   {
+    path: "/c/:id",
+    name: "conversation",
+    component: () => import("@/views/ConversationView.vue"),
+    meta: { title: "对话", crumb: "对话", width: "wide" },
+  },
+  {
     path: "/interview",
-    name: "interview",
-    component: () => import("@/views/InterviewView.vue"),
-    meta: { title: "开始采访", crumb: "采访现场" },
+    redirect: "/",
   },
   {
     path: "/diaries",
@@ -81,9 +85,7 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: "/agent",
-    name: "agent",
-    component: () => import("@/views/AgentView.vue"),
-    meta: { title: "问 Agent", crumb: "Agent 问答" },
+    redirect: "/",
   },
   {
     path: "/search",

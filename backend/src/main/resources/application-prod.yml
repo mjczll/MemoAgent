@@ -1,0 +1,35 @@
+# 发行版。配置名为 prod 时加载本文件。
+# 工程里没有 application-dev.yml 时会自动切到 prod；也可以手动指定 SPRING_PROFILES_ACTIVE=prod。
+# 下面是占位符。发布前改成自己的地址和密钥，这份填好的文件不要放进仓库。
+
+spring:
+  datasource:
+    # 发行环境的 MySQL。useSSL 按你的库是否启用加密连接调整
+    url: jdbc:mysql://数据库主机:3306/memoagent?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=true
+    username: 数据库用户名
+    password: 数据库密码
+  data:
+    redis:
+      host: Redis主机
+      port: 6379
+      # 没有密码就留空
+      password: Redis密码
+  ai:
+    model:
+      # openai 表示走 OpenAI 兼容客户端，请求实际发到 DeepSeek
+      chat: openai
+    openai:
+      api-key: DeepSeek密钥
+      # DeepSeek 的 OpenAI 兼容地址。客户端会自己补上 /v1/chat/completions
+      base-url: https://api.deepseek.com
+      chat:
+        options:
+          # deepseek-chat 为对话模型。推理模型可改成 deepseek-reasoner
+          model: deepseek-chat
+          temperature: 0.4
+
+logging:
+  level:
+    com.memoagent: info
+    # 发行环境不打印 SQL
+    com.memoagent.mapper: warn

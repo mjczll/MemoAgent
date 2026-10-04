@@ -23,6 +23,8 @@ public class DiaryListItemVO {
     private String visibility;
     private int experienceCount;
     private int knowledgeCount;
+    private List<Long> experienceIds;
+    private List<Long> knowledgeIds;
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm")
     private LocalDateTime createdAt;

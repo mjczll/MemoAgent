@@ -76,7 +76,7 @@
       <div class="panel" style="margin-top: 12px">
         <div class="panel-head"><b>换个入口</b></div>
         <div class="panel-body small stack" style="gap: 8px">
-          <button class="btn sm block" @click="askAgent">让 Agent 直接回答这个问题</button>
+          <button class="btn sm block" @click="askInConversation">在对话里接着问</button>
           <button class="btn sm block" @click="router.push('/graph')">去关系图谱看关联</button>
         </div>
       </div>
@@ -89,13 +89,11 @@ import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import EmptyState from "@/components/base/EmptyState.vue";
 import PromptChips from "@/components/base/PromptChips.vue";
-import { useAgentStore } from "@/stores/agent";
 import { useLibraryStore } from "@/stores/library";
 
 const route = useRoute();
 const router = useRouter();
 const library = useLibraryStore();
-const agent = useAgentStore();
 
 const HISTORY_KEY = "memoagent:search:v1";
 const EXAMPLES = ["缓存击穿", "Spring AI", "索引失效", "Tool Calling", "线程池 OOM", "双链笔记"];
@@ -175,11 +173,9 @@ function clear() {
   router.replace({ path: "/search" });
 }
 
-function askAgent() {
+function askInConversation() {
   const q = keyword.value.trim();
   if (!q) return;
-  agent.newThread();
-  agent.ask(q);
-  router.push("/agent");
+  router.push({ path: "/", query: { opening: q } });
 }
 </script>

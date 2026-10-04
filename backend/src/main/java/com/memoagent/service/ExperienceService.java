@@ -7,6 +7,8 @@ import com.memoagent.vo.ExperienceDetailVO;
 import com.memoagent.vo.ExperienceListItemVO;
 import com.memoagent.vo.PageData;
 
+import java.util.List;
+
 public interface ExperienceService {
 
     ExperienceDetailVO create(ExperienceCreateRequest request);
@@ -16,4 +18,6 @@ public interface ExperienceService {
     ExperienceDetailVO get(Long id);
 
     ExperienceDetailVO update(Long id, ExperienceUpdateRequest request);
+
+    void attachToDiary(Long diaryId, List<Long> experienceIds);
 }

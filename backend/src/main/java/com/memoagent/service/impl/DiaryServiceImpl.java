@@ -257,6 +257,8 @@ public class DiaryServiceImpl implements DiaryService {
         vo.setVisibility(PRIVATE);
         vo.setExperienceCount(experienceIds.size());
         vo.setKnowledgeCount(knowledgeIds.size());
+        vo.setExperienceIds(experienceIds);
+        vo.setKnowledgeIds(knowledgeIds);
         vo.setCreatedAt(diary.getCreatedAt());
         return vo;
     }

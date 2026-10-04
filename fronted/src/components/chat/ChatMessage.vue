@@ -4,11 +4,11 @@
     :class="{ user: message.role === 'user' }"
     :data-msg-id="message.id"
   >
-    <div class="avatar">{{ avatar }}</div>
-    <div class="stack" style="gap: 8px; max-width: min(680px, 82%)">
+    <div v-if="message.role !== 'user'" class="avatar">{{ avatar }}</div>
+    <div class="stack bubble-stack">
       <div v-if="showWho" class="who small">{{ whoLabel }}</div>
       <div class="bubble">
-        <MarkdownView v-if="markdown" :text="message.text" />
+        <MarkdownView v-if="markdown && message.role !== 'user'" :text="message.text" />
         <template v-else>{{ message.text }}</template>
       </div>
       <slot />

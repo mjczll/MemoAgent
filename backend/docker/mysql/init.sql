@@ -117,6 +117,33 @@ CREATE TABLE IF NOT EXISTS diary_knowledge (
     KEY idx_dk_know (knowledge_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS conversation (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    user_id BIGINT NOT NULL DEFAULT 1,
+    title VARCHAR(200) NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    draft_json MEDIUMTEXT,
+    result_json TEXT,
+    committed_diary_id BIGINT DEFAULT NULL,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    PRIMARY KEY (id),
+    KEY idx_conversation_user (user_id, deleted, updated_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS conversation_message (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    conversation_id BIGINT NOT NULL,
+    role VARCHAR(16) NOT NULL,
+    kind VARCHAR(32) NOT NULL,
+    text MEDIUMTEXT NOT NULL,
+    payload_json MEDIUMTEXT,
+    created_at DATETIME NOT NULL,
+    PRIMARY KEY (id),
+    KEY idx_conversation_message (conversation_id, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS knowledge_related (
     id BIGINT NOT NULL AUTO_INCREMENT,
     knowledge_id BIGINT NOT NULL,

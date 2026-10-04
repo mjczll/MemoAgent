@@ -1,155 +1,268 @@
 <template>
   <div class="fade-in">
-    <div class="toolbar" style="margin-bottom: 12px">
-      <button class="crumb" @click="router.push('/interview')">← 回到采访现场</button>
-      <span class="spacer" />
-      <button class="btn sm" :disabled="!draft" @click="regenerate">重新整理</button>
-      <button class="btn sm" :disabled="!draft" @click="discard">丢弃草稿</button>
-      <button class="btn sm primary" :disabled="!draft || draft.saved" @click="save">
-        {{ draft?.saved ? "已保存" : "保存到日记库" }}
+    <span class="crumb" @click="router.push('/')">← 返回</span>
+    <div class="page-head">
+      <div class="grow">
+        <h1 class="h1">整理草稿</h1>
+        <p class="lede" style="margin-bottom: 0">
+          {{
+            draft?.incident
+              ? "确认标题和正文。保存后会出现在日记列表，并提炼一张经验。"
+              : "这次没有具体经历。保存后不生成日记和经验，只写入你点过同意的补充和已确认的关联。"
+          }}
+        </p>
+      </div>
+      <button type="button" class="btn" :disabled="!draft" @click="regenerate">重新整理</button>
+      <button type="button" class="btn" :disabled="!draft" @click="discard">丢弃</button>
+      <button type="button" class="btn primary" :disabled="!draft || saved" @click="save">
+        {{ saved ? "已保存" : "保存" }}
       </button>
     </div>
 
-    <template v-if="draft">
-      <div class="panel" style="margin-bottom: 14px">
-        <div class="panel-body">
-          <div class="row wrap" style="gap: 8px; margin-bottom: 10px">
-            <span class="badge">采访草稿</span>
-            <span class="small faint">
-              {{ draft.date }} · {{ draft.kind }} · 预计沉淀 {{ draft.suggestedKnowledge.length }} 条知识
-            </span>
-            <span v-if="draft.saved" class="tag accent">已保存为日记</span>
-          </div>
-
+    <div v-if="draft" class="split">
+      <div class="panel">
+        <div class="panel-head">
+          <b>正文</b>
+          <span class="spacer" />
+          <span class="small faint">支持 Markdown 与 [[双链]]</span>
+        </div>
+        <div class="panel-body stack">
           <div class="field">
             <label>标题</label>
-            <input v-model="draft.title" class="input" />
+            <input v-model="draft.title" class="input" placeholder="例如：一次 Nginx 502 的排查记录" />
           </div>
-
-          <p class="lede" style="margin: 12px 0 0">{{ draft.summary }}</p>
-          <TagRow :tags="draft.tags" />
-        </div>
-      </div>
-
-      <div class="split left-wide">
-        <div class="stack">
-          <div class="panel">
-            <div class="panel-head">
-              <b>日记正文</b>
-              <span class="spacer" />
-              <span class="small faint">可直接编辑，保存后进入日记库</span>
-            </div>
-            <div class="panel-body">
-              <textarea v-model="draft.content" class="textarea" style="min-height: 260px" />
-            </div>
-          </div>
-
-          <div class="panel ai-block">
-            <div class="panel-head"><b>AI 结构化提炼</b></div>
-            <div class="panel-body kv">
-              <div class="kv-item"><span>问题</span><p>{{ draft.extraction.problem }}</p></div>
-              <div class="kv-item"><span>原因</span><p>{{ draft.extraction.cause }}</p></div>
-              <div class="kv-item"><span>解决方案</span><p>{{ draft.extraction.solution }}</p></div>
-              <div class="kv-item"><span>经验</span><p>{{ draft.extraction.lesson }}</p></div>
-            </div>
-          </div>
-        </div>
-
-        <div class="stack">
-          <div class="panel">
-            <div class="panel-head">
-              <b>建议关联知识</b>
-              <span class="spacer" />
-              <span class="small faint">命中已有条目则复用</span>
-            </div>
-            <div class="panel-body stack" style="gap: 8px">
-              <div v-for="(item, index) in draft.suggestedKnowledge" :key="index" class="kv-item">
-                <span>{{ item.existingId ? "已有知识" : "将新建知识" }}</span>
-                <p>{{ item.title }}</p>
-                <p class="small faint" style="margin-top: 2px">{{ item.reason }}</p>
-              </div>
-              <p v-if="!draft.suggestedKnowledge.length" class="small faint">
-                这次没有识别出可沉淀的知识条目。
-              </p>
-            </div>
-          </div>
-
-          <div class="panel">
-            <div class="panel-head"><b>保存后会发生什么</b></div>
-            <div class="panel-body small" style="color: var(--mute)">
-              <ul style="margin: 0; padding-left: 18px">
-                <li>生成 1 篇日记（来源标记为「采访」）</li>
-                <li>从这次对话提炼 1 张经验卡</li>
-                <li>复用或新建 {{ draft.suggestedKnowledge.length }} 条知识条目</li>
-                <li>全部写入本地 localStorage，不上传任何服务器</li>
-              </ul>
-              <button class="btn sm primary block" style="margin-top: 10px" :disabled="draft.saved" @click="save">
-                {{ draft.saved ? "已保存" : "保存到日记库" }}
-              </button>
-            </div>
+          <div class="field">
+            <label>正文</label>
+            <textarea v-model="draft.content" class="textarea" style="min-height: 320px" placeholder="## 背景&#10;&#10;发生了什么…&#10;&#10;## 解决&#10;&#10;…" />
           </div>
         </div>
       </div>
-    </template>
+
+      <div class="stack">
+        <div class="panel">
+          <div class="panel-head"><b>元信息</b></div>
+          <div class="panel-body stack">
+            <div class="field">
+              <label>日期</label>
+              <input v-model="draft.date" type="date" class="input" />
+            </div>
+            <div class="field">
+              <label>类型</label>
+              <SuggestCombo
+                v-model="draft.kind"
+                :options="kindOptions"
+                :maxlength="32"
+                placeholder="选择已有类型，或输入新类型"
+                aria-label="选择已有类型"
+              />
+            </div>
+            <div class="field">
+              <label>标签（逗号分隔）</label>
+              <input v-model="tagsText" class="input" placeholder="Redis, 缓存, 排查" />
+            </div>
+            <div class="field">
+              <label>一句话摘要</label>
+              <textarea v-model="draft.summary" class="textarea" style="min-height: 72px" />
+            </div>
+            <div class="row small faint">
+              <span>{{ draft.content.length }} 字</span>
+              <span>·</span>
+              <span>预计 {{ Math.max(1, Math.round(draft.content.length / 220)) }} 分钟读完</span>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="draft.incident" class="panel">
+          <div class="panel-head"><b>经验</b></div>
+          <div class="panel-body stack">
+            <div class="field">
+              <label>问题</label>
+              <textarea :value="editable(draft.problem)" class="textarea" style="min-height: 64px" placeholder="待补充" @input="draft.problem = fieldValue($event)" />
+            </div>
+            <div class="field">
+              <label>原因</label>
+              <textarea :value="editable(draft.cause)" class="textarea" style="min-height: 64px" placeholder="待补充" @input="draft.cause = fieldValue($event)" />
+            </div>
+            <div class="field">
+              <label>解决方案</label>
+              <textarea :value="editable(draft.solution)" class="textarea" style="min-height: 64px" placeholder="待补充" @input="draft.solution = fieldValue($event)" />
+            </div>
+            <div class="field">
+              <label>经验</label>
+              <textarea :value="editable(draft.lesson)" class="textarea" style="min-height: 64px" placeholder="待补充" @input="draft.lesson = fieldValue($event)" />
+            </div>
+          </div>
+        </div>
+
+        <div v-if="draft.incident" class="panel">
+          <div class="panel-head"><b>相关记录</b></div>
+          <div class="panel-body stack" style="gap: 8px">
+            <label v-for="item in related" :key="`${item.type}-${item.id}`" class="row" style="align-items: flex-start">
+              <input v-model="selectedRelated[relationKey(item)]" type="checkbox" />
+              <span class="small">{{ relationLabel(item.type) }} · {{ item.title }}</span>
+            </label>
+            <p v-if="!related.length" class="small faint">没有对上已有的日记、经验或知识。保存后只会留下这次新写的日记和经验。</p>
+          </div>
+        </div>
+
+        <div class="panel ai-block">
+          <div class="panel-head"><b>预览</b></div>
+          <div class="panel-body">
+            <MarkdownView :text="draft.content || '*还没有内容*'" />
+          </div>
+        </div>
+      </div>
+    </div>
 
     <EmptyState
-      v-else
+      v-else-if="!loading"
       icon="✎"
       title="还没有采访草稿"
-      hint="先去采访现场和 AI 聊完五步，草稿会自动生成在这里。"
+      hint="回到首页，讲完后点「整理」。"
     >
-      <button class="btn primary sm" @click="router.push('/interview')">去采访</button>
+      <button class="btn primary sm" @click="router.push('/')">回到首页</button>
     </EmptyState>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { errorMessage } from "@/api/http";
+import type { RecallHit } from "@/api/conversation";
 import EmptyState from "@/components/base/EmptyState.vue";
-import TagRow from "@/components/base/TagRow.vue";
-import { useInterviewStore } from "@/stores/interview";
+import MarkdownView from "@/components/base/MarkdownView.vue";
+import SuggestCombo from "@/components/base/SuggestCombo.vue";
+import { useConversationStore } from "@/stores/conversation";
 import { useLibraryStore } from "@/stores/library";
 import { useUiStore } from "@/stores/ui";
 
+const route = useRoute();
 const router = useRouter();
-const store = useInterviewStore();
+const store = useConversationStore();
 const library = useLibraryStore();
 const ui = useUiStore();
+const loading = ref(true);
+const tagsText = ref("");
+const selectedRelated = ref<Record<string, boolean>>({});
 
-store.hydrate();
+const draft = computed(() => store.current?.draft ?? null);
+const saved = computed(() => store.current?.status === "committed");
+const kindOptions = computed(() => library.diaryKinds.map((item) => item.name));
+const related = computed(() => store.current?.related ?? []);
 
-const draft = computed(() => store.draft);
+function relationKey(item: RecallHit) {
+  return `${item.type}:${item.id}`;
+}
 
-function regenerate() {
-  if (!store.draft) return;
-  if (store.regenerateDraft()) ui.toast("已按最新回答重新整理草稿");
-  else ui.toast("回答还不够，先去采访现场聊完五步", "info");
+function relationLabel(type: RecallHit["type"]) {
+  if (type === "diary") return "日记";
+  if (type === "experience") return "经验";
+  return "知识";
+}
+
+function editable(value: string) {
+  return value === "待补充" ? "" : value;
+}
+
+function fieldValue(event: Event) {
+  return (event.target as HTMLTextAreaElement).value;
+}
+
+watch(
+  draft,
+  (value) => {
+    tagsText.value = value?.tags.join(", ") ?? "";
+  },
+  { immediate: true },
+);
+
+watch(
+  related,
+  (items) => {
+    const next = { ...selectedRelated.value };
+    for (const item of items) {
+      const key = relationKey(item);
+      if (next[key] === undefined) next[key] = true;
+    }
+    selectedRelated.value = next;
+  },
+  { immediate: true },
+);
+
+onMounted(async () => {
+  try {
+    await library.hydrate();
+    await store.open(String(route.params.id ?? ""));
+  } catch (error) {
+    ui.toast(errorMessage(error, "草稿加载失败"), "error");
+  } finally {
+    loading.value = false;
+  }
+});
+
+async function regenerate() {
+  try {
+    await store.draft();
+    ui.toast("已按最新对话重新整理");
+  } catch (error) {
+    ui.toast(errorMessage(error, "整理失败"), "error");
+  }
 }
 
 async function save() {
-  const target = store.draft;
-  if (!target) return;
-  if (target.saved && target.savedDiaryId) {
-    router.push(`/diaries/${target.savedDiaryId}`);
+  const target = draft.value;
+  if (!target || !store.current) return;
+  if (saved.value && store.current.committedDiaryId) {
+    router.push(`/diaries/${store.current.committedDiaryId}`);
     return;
   }
+  const tags = tagsText.value
+    .split(/[,，、\s]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const knowledgeIds: number[] = [];
+  const experienceIds: number[] = [];
+  for (const item of related.value) {
+    if (!selectedRelated.value[relationKey(item)]) continue;
+    if (item.type === "knowledge") knowledgeIds.push(item.id);
+    if (item.type === "experience") experienceIds.push(item.id);
+    if (item.type === "diary") {
+      library.experiences
+        .filter((experience) => experience.diaryId === String(item.id))
+        .forEach((experience) => experienceIds.push(Number(experience.id)));
+    }
+  }
   try {
-    const created = await library.saveDraft(target);
-    store.markDraftSaved(created.diaryId);
-    ui.toast(
-      `已生成日记，并沉淀 1 张经验卡${created.newKnowledgeIds.length ? `、新建 ${created.newKnowledgeIds.length} 条知识` : ""}`,
-    );
-    router.push(`/diaries/${created.diaryId}`);
+    const created = await store.commit({
+      title: target.title,
+      date: target.date,
+      summary: target.summary,
+      content: target.content,
+      kind: target.kind,
+      tags,
+      problem: target.problem,
+      cause: target.cause,
+      solution: target.solution,
+      lesson: target.lesson,
+      knowledgeIds,
+      experienceIds,
+    });
+    await library.hydrate();
+    if (created.diaryId) {
+      ui.toast("已保存日记和经验");
+      router.push(`/diaries/${created.diaryId}`);
+      return;
+    }
+    ui.toast(`已写入 ${created.knowledgeIds.length} 条知识`);
+    router.push(created.knowledgeIds[0] ? `/knowledge/${created.knowledgeIds[0]}` : "/knowledge");
   } catch (error) {
-    ui.toast(errorMessage(error, "保存日记失败"), "error");
+    ui.toast(errorMessage(error, "保存失败"), "error");
   }
 }
 
 function discard() {
-  store.clearDraft();
-  ui.toast("已丢弃这次草稿", "info");
-  router.push("/interview");
+  ui.toast("草稿还在这次对话里，可以回到对话继续", "info");
+  router.push("/");
 }
 </script>

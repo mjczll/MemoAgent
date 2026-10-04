@@ -46,6 +46,21 @@
           <span>{{ item.label }}</span>
         </router-link>
       </nav>
+
+      <div class="rail-group">最近</div>
+      <div class="thread-list">
+        <router-link
+          v-for="item in conversations.sessions"
+          :key="item.id"
+          class="thread-row"
+          :class="{ 'is-on': isThread(item.id) }"
+          :to="`/c/${item.id}`"
+          @click="emit('navigate')"
+        >
+          <span class="thread-title">{{ item.title }}</span>
+          <span class="thread-more" title="删除" @click.prevent.stop="removeThread(item.id)">✕</span>
+        </router-link>
+      </div>
     </div>
 
     <div class="rail-foot">
@@ -59,12 +74,9 @@
 
 <script setup lang="ts">
 import { computed, onMounted } from "vue";
-import { useRoute } from "vue-router";
-import { useAgentStore } from "@/stores/agent";
-import { useInterviewStore } from "@/stores/interview";
-import { useLibraryStore } from "@/stores/library";
-import { useUiStore } from "@/stores/ui";
+import { useRoute, useRouter } from "vue-router";
 import SvgIcon from "@/components/base/SvgIcon.vue";
+import { useConversationStore } from "@/stores/conversation";
 
 defineProps<{ open: boolean; collapsed: boolean }>();
 const emit = defineEmits<{
@@ -73,17 +85,12 @@ const emit = defineEmits<{
 }>();
 
 const route = useRoute();
-const library = useLibraryStore();
-const ui = useUiStore();
-const interview = useInterviewStore();
-const agent = useAgentStore();
+const router = useRouter();
+const conversations = useConversationStore();
 
 onMounted(() => {
-  interview.hydrate();
-  agent.hydrate();
+  void conversations.refresh().catch(() => undefined);
 });
-
-const stats = computed(() => library.stats);
 
 interface NavItem {
   to: string;
@@ -93,8 +100,6 @@ interface NavItem {
 
 const mainNav = computed<NavItem[]>(() => [
   { to: "/", label: "首页", icon: "home" },
-  { to: "/interview", label: "开始采访", icon: "interview" },
-  { to: "/agent", label: "问 Agent", icon: "agent" },
 ]);
 
 const assetNav = computed<NavItem[]>(() => [
@@ -113,5 +118,16 @@ function isActive(item: { to: string }): boolean {
     );
   }
   return route.path === item.to || route.path.startsWith(`${item.to}/`);
+}
+
+function isThread(id: number) {
+  return route.name === "conversation" && String(route.params.id) === String(id);
+}
+
+async function removeThread(id: number) {
+  await conversations.remove(id);
+  if (isThread(id)) {
+    await router.push("/");
+  }
 }
 </script>

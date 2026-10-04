@@ -111,6 +111,9 @@
             </div>
           </template>
         </div>
+        <div class="panel-foot">
+          <button type="button" class="btn sm ghost full-w" @click="resetSettings">恢复默认设置</button>
+        </div>
       </div>
     </transition>
 
@@ -185,19 +188,52 @@ const isLocal = computed(() => route.name === "graph-local");
 const localId = computed(() => (route.params.id as string) ?? "");
 const localDepth = ref(Number(route.query.depth) ?? 2);
 
+const SETTINGS_KEY = "memoagent:graph-settings";
+const DEFAULT_FORCES: ForcesConfig = { center: 40, repulsion: 30, attraction: 80, linkLength: 50 };
+const DEFAULT_DISPLAY: DisplayConfig = { showLabels: true, textOpacity: 0.85, nodeScale: 1, linkWidth: 1 };
+
+interface GraphSettings {
+  searchQuery: string;
+  typeFilter: "all" | "diary" | "experience" | "knowledge";
+  orphansOnly: boolean;
+  colorGroups: boolean;
+  domain: string | null;
+  edgeFilter: string[];
+  forces: ForcesConfig;
+  display: DisplayConfig;
+}
+
+function loadSettings(): Partial<GraphSettings> | null {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<GraphSettings>;
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+const savedSettings = loadSettings();
+const typeValues = ["all", "diary", "experience", "knowledge"] as const;
+
 /* ---- UI state ---- */
 const settingsOpen = ref(false);
 const activeTab = ref<"filters" | "groups" | "display" | "forces">("filters");
-const searchQuery = ref("");
-const typeFilter = ref<"all" | "diary" | "experience" | "knowledge">("all");
-const orphansOnly = ref(false);
-const colorGroups = ref(false);
-const domain = ref<string | null>(null);
-const edgeFilter = ref<string[]>([]);
+const searchQuery = ref(typeof savedSettings?.searchQuery === "string" ? savedSettings.searchQuery : "");
+const typeFilter = ref<(typeof typeValues)[number]>(
+  typeValues.includes(savedSettings?.typeFilter as (typeof typeValues)[number])
+    ? (savedSettings?.typeFilter as (typeof typeValues)[number])
+    : "all",
+);
+const orphansOnly = ref(savedSettings?.orphansOnly === true);
+const colorGroups = ref(savedSettings?.colorGroups === true);
+const domain = ref<string | null>(typeof savedSettings?.domain === "string" ? savedSettings.domain : null);
+const edgeFilter = ref<string[]>(Array.isArray(savedSettings?.edgeFilter) ? savedSettings.edgeFilter.filter((item) => typeof item === "string") : []);
 
 /* ---- Forces & Display ---- */
-const forces = reactive<ForcesConfig>({ center: 40, repulsion: 30, attraction: 80, linkLength: 50 });
-const display = reactive<DisplayConfig>({ showLabels: true, textOpacity: 0.85, nodeScale: 1, linkWidth: 1 });
+const forces = reactive<ForcesConfig>({ ...DEFAULT_FORCES, ...(savedSettings?.forces ?? {}) });
+const display = reactive<DisplayConfig>({ ...DEFAULT_DISPLAY, ...(savedSettings?.display ?? {}) });
 
 /* ---- Engine ---- */
 const canvasHost = ref<HTMLElement | null>(null);
@@ -311,9 +347,36 @@ function reloadLocal() {
   setTimeout(() => fitView(), 300);
 }
 
+function currentSettings(): GraphSettings {
+  return {
+    searchQuery: searchQuery.value,
+    typeFilter: typeFilter.value,
+    orphansOnly: orphansOnly.value,
+    colorGroups: colorGroups.value,
+    domain: domain.value,
+    edgeFilter: [...edgeFilter.value],
+    forces: { ...forces },
+    display: { ...display },
+  };
+}
+
+function resetSettings() {
+  searchQuery.value = "";
+  typeFilter.value = "all";
+  orphansOnly.value = false;
+  colorGroups.value = false;
+  domain.value = null;
+  edgeFilter.value = [];
+  Object.assign(forces, DEFAULT_FORCES);
+  Object.assign(display, DEFAULT_DISPLAY);
+}
+
 /* ---- Watches ---- */
 watch(forces, (f) => setForces({ ...f }), { deep: true });
 watch(display, (d) => setDisplay({ ...d }), { deep: true });
+watch(currentSettings, (value) => {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(value));
+}, { deep: true });
 watch(colorGroups, () => { const d = buildInput(); setData(d.nodes, d.edges); setTimeout(() => fitView(), 300); });
 watch([typeFilter, orphansOnly, edgeFilter], () => { const d = buildInput(); setData(d.nodes, d.edges); setTimeout(() => fitView(), 300); });
 watch(searchQuery, (q) => search(q));
@@ -323,6 +386,9 @@ watch(graphData, () => { const d = buildInput(); setData(d.nodes, d.edges); setT
 onMounted(async () => {
   if (!canvasHost.value) return;
   await mount(canvasHost.value);
+  setForces({ ...forces });
+  setDisplay({ ...display });
+  search(searchQuery.value);
   const d = buildInput();
   setData(d.nodes, d.edges);
   // 初始几次 fitView 让图居中
@@ -357,6 +423,7 @@ onMounted(async () => {
 .tab-btn:hover { color: var(--ink); }
 .tab-btn.active { color: var(--ink); border-bottom-color: var(--ink); }
 .panel-body { padding: 10px 14px 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+.panel-foot { padding: 10px 14px 12px; border-top: 1px solid var(--line); }
 
 /* Panel section */
 .ps { display: flex; flex-direction: column; gap: 5px; }

@@ -142,7 +142,10 @@ const removing = ref(false);
 const diary = ref<Diary | undefined>();
 
 const diaryId = computed(() => String(route.params.id ?? ""));
-const experiences = computed(() => library.experiences.filter((item) => item.diaryId === diaryId.value));
+const experiences = computed(() => {
+  const linked = new Set(diary.value?.experienceIds ?? []);
+  return library.experiences.filter((item) => item.diaryId === diaryId.value || linked.has(item.id));
+});
 const knowledges = computed(() =>
   library.knowledge.filter((item) => item.id && diary.value?.knowledgeIds.includes(item.id)),
 );
@@ -152,6 +155,8 @@ watch(
   diaryId,
   async (id) => {
     loading.value = true;
+    await library.refreshExperiences();
+    await library.refreshKnowledge();
     diary.value = id ? await library.fetchDiary(id) : undefined;
     loading.value = false;
   },

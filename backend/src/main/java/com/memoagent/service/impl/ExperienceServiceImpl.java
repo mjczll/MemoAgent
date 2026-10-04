@@ -157,6 +157,31 @@ public class ExperienceServiceImpl implements ExperienceService {
         return toDetail(experience, diary == null ? null : diary.getTitle(), tags, knowledgeIds);
     }
 
+    @Override
+    @Transactional
+    public void attachToDiary(Long diaryId, List<Long> experienceIds) {
+        if (experienceIds == null || experienceIds.isEmpty()) {
+            return;
+        }
+        requireDiary(diaryId);
+        Set<Long> linked = diaryExperienceMapper.selectList(Wrappers.<DiaryExperience>lambdaQuery()
+                        .eq(DiaryExperience::getDiaryId, diaryId)).stream()
+                .map(DiaryExperience::getExperienceId)
+                .collect(Collectors.toSet());
+        for (Long experienceId : experienceIds) {
+            if (experienceId == null || linked.contains(experienceId)) {
+                continue;
+            }
+            Experience experience = experienceMapper.selectById(experienceId);
+            if (experience == null || !Objects.equals(experience.getUserId(), CurrentUser.id())) {
+                continue;
+            }
+            linkDiary(diaryId, experienceId);
+            linked.add(experienceId);
+        }
+        rebuildDiaryKnowledge(diaryId);
+    }
+
     private Diary requireDiary(Long diaryId) {
         Diary diary = diaryMapper.selectById(diaryId);
         if (diary == null || !Objects.equals(diary.getUserId(), CurrentUser.id())) {

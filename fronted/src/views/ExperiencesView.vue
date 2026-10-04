@@ -37,7 +37,7 @@
       title="还没有匹配的经验卡"
       hint="经验来自日记的自动提炼，先去采访或写一篇日记吧。"
     >
-      <button class="btn primary sm" @click="router.push('/interview')">开始采访</button>
+      <button class="btn primary sm" @click="router.push('/')">去对话</button>
     </EmptyState>
   </div>
 </template>
