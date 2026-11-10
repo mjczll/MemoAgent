@@ -103,3 +103,43 @@ export function updateDiary(id: string, payload: DiaryPayload): Promise<Diary> {
 export function deleteDiary(id: string): Promise<void> {
   return request<null>(`/api/diaries/${id}`, { method: "DELETE" }).then(() => undefined);
 }
+
+export interface KnowledgeCandidate {
+  title: string;
+  domain?: string;
+  category?: string;
+  summary?: string;
+  content?: string;
+  tags?: string[];
+}
+
+export interface ExperienceCandidate {
+  title: string;
+  problem: string;
+  cause?: string;
+  solution?: string;
+  lesson?: string;
+  domain?: string;
+  tags?: string[];
+  knowledge?: KnowledgeCandidate | null;
+}
+
+export interface DiaryGeneration {
+  title: string;
+  summary: string;
+  content: string;
+  kind: string;
+  tags: string[];
+  experiences: ExperienceCandidate[];
+}
+
+export function generateDiary(content: string): Promise<DiaryGeneration> {
+  return request<DiaryGeneration>("/api/diaries/generate", {
+    method: "POST",
+    body: JSON.stringify({ content }),
+  });
+}
+
+export function extractDiary(id: string): Promise<{ experiences: ExperienceCandidate[] }> {
+  return request<{ experiences: ExperienceCandidate[] }>(`/api/diaries/${id}/extract`, { method: "POST" });
+}

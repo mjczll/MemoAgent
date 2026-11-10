@@ -28,4 +28,9 @@ public class UnavailableConversationModel implements ConversationModel {
     public DraftReply draft(String prompt) {
         throw BusinessException.badRequest("模型尚未配置");
     }
+
+    @Override
+    public KnowledgeResponse knowledge(String prompt) {
+        throw BusinessException.badRequest("模型尚未配置");
+    }
 }

@@ -49,7 +49,9 @@ function autosize() {
   const el = textareaRef.value;
   if (!el) return;
   el.style.height = "auto";
-  el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
+  const max = Number.parseFloat(getComputedStyle(el).maxHeight) || 160;
+  el.style.height = `${Math.min(el.scrollHeight, max)}px`;
+  el.style.overflowY = el.scrollHeight > max + 1 ? "auto" : "hidden";
 }
 
 function startInterview() {

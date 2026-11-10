@@ -61,6 +61,34 @@
                 <p>{{ item.title }}</p>
               </div>
               <p v-if="!experiences.length" class="small faint">还没有提炼出经验卡。</p>
+              <button type="button" class="btn sm" :disabled="extracting || savingExperiences" @click="extract">
+                {{ extracting ? "提炼中…" : "从这篇日记提炼经验" }}
+              </button>
+              <p v-if="extractError" class="small" style="color: var(--danger, #e66); margin: 8px 0 0">{{ extractError }}</p>
+              <p v-else-if="extracted && !candidates.length" class="small faint" style="margin: 8px 0 0">这篇没有可沉淀的经验。</p>
+              <div v-for="(item, index) in candidates" :key="index" class="kv-item" style="margin-top: 8px">
+                <label>
+                  <input v-model="item.keep" type="checkbox" />
+                  留下这条经验
+                </label>
+                <p><b>问题</b> {{ item.problem }}</p>
+                <p v-if="item.cause"><b>原因</b> {{ item.cause }}</p>
+                <p v-if="item.solution"><b>解决方案</b> {{ item.solution }}</p>
+                <p v-if="item.lesson"><b>经验</b> {{ item.lesson }}</p>
+                <label v-if="item.knowledge">
+                  <input v-model="item.keepKnowledge" type="checkbox" :disabled="!item.keep" />
+                  同时写入知识：{{ item.knowledge.title }}
+                </label>
+              </div>
+              <button
+                v-if="candidates.some((item) => item.keep)"
+                type="button"
+                class="btn sm primary"
+                :disabled="savingExperiences"
+                @click="saveExperiences"
+              >
+                {{ savingExperiences ? "保存中…" : "保存选中的经验" }}
+              </button>
             </div>
             <div>
               <div class="small faint" style="margin-bottom: 6px">关联知识 · {{ knowledges.length }}</div>
@@ -120,6 +148,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { extractDiary, type ExperienceCandidate } from "@/api/diary";
+import { createExperience } from "@/api/experience";
 import { errorMessage } from "@/api/http";
 import EmptyState from "@/components/base/EmptyState.vue";
 import MarkdownView from "@/components/base/MarkdownView.vue";
@@ -136,9 +166,19 @@ const router = useRouter();
 const library = useLibraryStore();
 const ui = useUiStore();
 
+interface OrganizedExperience extends ExperienceCandidate {
+  keep: boolean;
+  keepKnowledge: boolean;
+}
+
 const confirmDelete = ref(false);
 const loading = ref(true);
 const removing = ref(false);
+const extracting = ref(false);
+const extracted = ref(false);
+const extractError = ref("");
+const savingExperiences = ref(false);
+const candidates = ref<OrganizedExperience[]>([]);
 const diary = ref<Diary | undefined>();
 
 const diaryId = computed(() => String(route.params.id ?? ""));
@@ -155,6 +195,9 @@ watch(
   diaryId,
   async (id) => {
     loading.value = true;
+    candidates.value = [];
+    extracted.value = false;
+    extractError.value = "";
     await library.refreshExperiences();
     await library.refreshKnowledge();
     diary.value = id ? await library.fetchDiary(id) : undefined;
@@ -176,6 +219,75 @@ async function removeDiary() {
     ui.toast(errorMessage(error, "删除失败"), "error");
   } finally {
     removing.value = false;
+  }
+}
+
+async function extract() {
+  if (!diary.value || extracting.value) return;
+  extracting.value = true;
+  extractError.value = "";
+  try {
+    const result = await extractDiary(diary.value.id);
+    candidates.value = (result.experiences ?? []).map((item) => ({
+      ...item,
+      keep: false,
+      keepKnowledge: false,
+    }));
+    extracted.value = true;
+    if (!candidates.value.length) {
+      ui.toast("这篇没有可沉淀的经验");
+    }
+  } catch (error) {
+    extractError.value = errorMessage(error, "提炼失败");
+    ui.toast(extractError.value, "error");
+  } finally {
+    extracting.value = false;
+  }
+}
+
+async function saveExperiences() {
+  if (!diary.value || savingExperiences.value) return;
+  const diaryId = diary.value.id;
+  const selected = candidates.value.filter((item) => item.keep);
+  if (!selected.length) return;
+  savingExperiences.value = true;
+  try {
+    for (const item of selected) {
+      const knowledge = item.keepKnowledge ? item.knowledge : null;
+      await createExperience({
+        diaryId,
+        title: item.title,
+        problem: item.problem,
+        cause: item.cause,
+        solution: item.solution,
+        lesson: item.lesson,
+        domain: item.domain,
+        tags: item.tags ?? [],
+        newKnowledge: knowledge
+          ? [
+              {
+                title: knowledge.title,
+                category: knowledge.category,
+                domain: knowledge.domain,
+                summary: knowledge.summary,
+                content: knowledge.content ?? "",
+                tags: knowledge.tags ?? [],
+              },
+            ]
+          : [],
+      });
+    }
+    await library.refreshExperiences();
+    await library.refreshKnowledge();
+    const refreshed = await library.fetchDiary(diaryId);
+    if (refreshed) diary.value = refreshed;
+    candidates.value = [];
+    extracted.value = false;
+    ui.toast("经验已保存");
+  } catch (error) {
+    ui.toast(errorMessage(error, "经验没有写上"), "error");
+  } finally {
+    savingExperiences.value = false;
   }
 }
 

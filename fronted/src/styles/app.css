@@ -176,7 +176,8 @@ select {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 12px 12px 10px 16px;
+  /* 右侧留出折叠按钮的位置，避免按钮压住品牌文字 */
+  padding: 12px 40px 10px 16px;
   margin: 0;
   position: relative;
   min-height: 42px;
@@ -205,11 +206,11 @@ select {
   display: none;
 }
 
-/* === 折叠/展开按钮：骑在侧栏右边缘的悬浮圆按钮 === */
+/* === 折叠/展开按钮：贴在侧栏头部右侧，完整落在栏内 === */
 .rail-toggle-btn {
   position: absolute;
   top: 50%;
-  right: -12px;
+  right: 10px;
   transform: translateY(-50%);
   z-index: 5;
   width: 22px;
@@ -1704,11 +1705,14 @@ details.fold .fold-body {
 .ask-box .textarea {
   width: 100%;
   min-width: 0;
+  min-height: 0;
+  max-height: 160px;
   border: 0;
   background: transparent;
   padding: 4px 4px 2px;
   font-size: 14.5px;
   color: var(--ink);
+  overflow-y: hidden;
   resize: none;
 }
 

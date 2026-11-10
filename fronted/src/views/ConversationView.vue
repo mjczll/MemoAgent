@@ -70,10 +70,12 @@
       <div class="composer">
         <div class="dock-composer">
           <textarea
+            ref="composerRef"
             v-model="input"
             rows="1"
             placeholder="给 MemoAgent 发送消息"
             @keydown.enter.exact.prevent="submitThread"
+            @input="autosize"
           />
           <button
             class="dock-send"
@@ -96,10 +98,12 @@
       <p>和 AI 聊聊就好。讲一件事，或问问过去的记录，再整理成日记、经验和知识。</p>
       <div class="dock-composer">
         <textarea
+          ref="composerRef"
           v-model="input"
           rows="1"
           placeholder="给 MemoAgent 发送消息"
           @keydown.enter.exact.prevent="submitHome"
+          @input="autosize"
         />
         <button
           class="dock-send"
@@ -118,7 +122,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { errorMessage } from "@/api/http";
 import { isAbortError } from "@/api/conversation";
@@ -132,6 +136,7 @@ const router = useRouter();
 const store = useConversationStore();
 const ui = useUiStore();
 const input = ref("");
+const composerRef = ref<HTMLTextAreaElement | null>(null);
 const drafting = ref(false);
 const scrollRef = ref<HTMLElement | null>(null);
 
@@ -160,6 +165,33 @@ const canDraft = computed(() => {
   return Boolean(latest?.payload?.ready);
 });
 
+/** 按内容高度调整输入框，到 CSS 的 max-height 就停住，超出部分改为内部滚动 */
+function applySize(el: HTMLTextAreaElement) {
+  el.style.height = "auto";
+  const max = Number.parseFloat(getComputedStyle(el).maxHeight) || 160;
+  el.style.height = `${Math.min(el.scrollHeight, max)}px`;
+  // 留 1px 容差，避免小数像素在刚好等于上限时闪出滚动条
+  el.style.overflowY = el.scrollHeight > max + 1 ? "auto" : "hidden";
+}
+
+function autosize(event: Event) {
+  const el = event.target as HTMLTextAreaElement | null;
+  if (el) applySize(el);
+}
+
+function resizeComposer() {
+  const el = composerRef.value;
+  if (el) applySize(el);
+}
+
+/** 发送后清空并把高度收回单行 */
+async function resetComposer() {
+  input.value = "";
+  await nextTick();
+  const el = composerRef.value;
+  if (el) applySize(el);
+}
+
 function refLabel(type: ConversationRef["type"]) {
   if (type === "diary") return "日记";
   if (type === "experience") return "经验";
@@ -175,7 +207,7 @@ function openRef(ref: ConversationRef) {
 async function submitHome() {
   const text = input.value.trim();
   if (!text || store.sending) return;
-  input.value = "";
+  await resetComposer();
   try {
     const id = await store.openFromHome(text);
     await router.push(`/c/${id}`);
@@ -190,7 +222,7 @@ async function submitHome() {
 async function submitThread() {
   const text = input.value.trim();
   if (!text) return;
-  input.value = "";
+  await resetComposer();
   try {
     await store.send(text);
   } catch (error) {
@@ -244,6 +276,7 @@ watch(
 );
 
 onMounted(async () => {
+  window.addEventListener("resize", resizeComposer);
   try {
     await store.refresh();
     const opening = typeof route.query.opening === "string" ? route.query.opening.trim() : "";
@@ -259,6 +292,8 @@ onMounted(async () => {
     ui.toast(errorMessage(error, "对话加载失败"), "error");
   }
 });
+
+onBeforeUnmount(() => window.removeEventListener("resize", resizeComposer));
 </script>
 
 <style scoped>
@@ -317,6 +352,7 @@ onMounted(async () => {
   font: inherit;
   font-size: 15px;
   line-height: 1.5;
+  overflow-y: hidden;
   resize: none;
 }
 

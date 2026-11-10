@@ -11,4 +11,6 @@ public interface ConversationModel {
     Flux<String> streamReply(String prompt, Object tools);
 
     DraftReply draft(String prompt);
+
+    KnowledgeResponse knowledge(String prompt);
 }

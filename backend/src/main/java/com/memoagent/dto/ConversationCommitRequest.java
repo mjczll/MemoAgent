@@ -30,4 +30,7 @@ public class ConversationCommitRequest {
     private List<Long> knowledgeIds;
 
     private List<Long> experienceIds;
+
+    /** 用户在草稿页勾选的知识候选，未勾选的不回传。 */
+    private List<KnowledgeDraftRequest> knowledgeDrafts;
 }

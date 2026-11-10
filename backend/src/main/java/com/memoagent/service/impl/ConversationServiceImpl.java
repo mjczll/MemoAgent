@@ -3,6 +3,7 @@ package com.memoagent.service.impl;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.memoagent.ai.KnowledgeCandidate;
 import com.memoagent.common.CurrentUser;
 import com.memoagent.common.DiaryKinds;
 import com.memoagent.common.DiaryOrigins;
@@ -13,11 +14,14 @@ import com.memoagent.conversation.ConversationPrompts;
 import com.memoagent.conversation.ConversationRecall;
 import com.memoagent.conversation.DraftReply;
 import com.memoagent.conversation.DraftSanitizer;
+import com.memoagent.conversation.KnowledgeCandidateSanitizer;
+import com.memoagent.conversation.KnowledgeResponse;
 import com.memoagent.conversation.MessagePayload;
 import com.memoagent.conversation.OrganizeReady;
 import com.memoagent.conversation.RecallHit;
 import com.memoagent.conversation.TurnTools;
 import com.memoagent.conversation.StoredDraft;
+import com.memoagent.conversation.StoredKnowledgeCandidate;
 import com.memoagent.conversation.TurnReply;
 import com.memoagent.conversation.TurnSanitizer;
 import com.memoagent.dto.ConversationChoiceRequest;
@@ -236,14 +240,19 @@ public class ConversationServiceImpl implements ConversationService {
         if (!conversationModel.available()) {
             throw BusinessException.badRequest("请先配置模型，再整理草稿");
         }
+        List<String> storyLines = DraftSanitizer.storyLines(userLines);
+        String prompt = draftPrompt(storyLines);
         DraftReply reply;
         try {
-            reply = conversationModel.draft(draftPrompt(DraftSanitizer.storyLines(userLines)));
+            reply = conversationModel.draft(prompt);
         } catch (RuntimeException exception) {
             log.warn("Draft generation failed", exception);
             throw BusinessException.badRequest("草稿没有生成，请再试一次");
         }
         StoredDraft draft = DraftSanitizer.sanitize(reply, userLines);
+        draft.setKnowledgeCandidates(storyLines.isEmpty()
+                ? List.<StoredKnowledgeCandidate>of()
+                : KnowledgeCandidateSanitizer.sanitize(knowledgeCandidates(prompt), storyLines));
         conversation.setDraftJson(writeJson(draft));
         conversation.setStatus(DRAFTED);
         touch(conversation);
@@ -265,7 +274,7 @@ public class ConversationServiceImpl implements ConversationService {
         List<ConversationMessage> messages = messages(conversation.getId());
         CommitResult result = draft.isIncident()
                 ? commitIncident(draft, messages, request)
-                : commitSupplements(messages);
+                : commitSupplements(messages, request);
         conversation.setDraftJson(writeJson(draft));
         conversation.setResultJson(writeJson(result));
         conversation.setCommittedDiaryId(result.getDiaryId());
@@ -441,7 +450,7 @@ public class ConversationServiceImpl implements ConversationService {
         experienceRequest.setDomain(draft.getDomain());
         experienceRequest.setTags(draft.getTags());
         experienceRequest.setKnowledgeIds(mergedIds(acceptedKnowledgeIds(messages), request == null ? null : request.getKnowledgeIds()));
-        experienceRequest.setNewKnowledge(acceptedSupplements(messages));
+        experienceRequest.setNewKnowledge(mergedKnowledge(acceptedSupplements(messages), request));
         ExperienceDetailVO experience = experienceService.create(experienceRequest);
         experienceService.attachToDiary(diary.getId(), request == null ? null : request.getExperienceIds());
 
@@ -452,24 +461,48 @@ public class ConversationServiceImpl implements ConversationService {
         return result;
     }
 
-    private CommitResult commitSupplements(List<ConversationMessage> messages) {
-        List<KnowledgeDraftRequest> supplements = acceptedSupplements(messages);
-        if (supplements.isEmpty()) {
+    private CommitResult commitSupplements(List<ConversationMessage> messages, ConversationCommitRequest request) {
+        List<KnowledgeDraftRequest> drafts = mergedKnowledge(acceptedSupplements(messages), request);
+        if (drafts.isEmpty()) {
             throw BusinessException.badRequest("没有你同意写入的内容");
         }
         CommitResult result = new CommitResult();
-        for (KnowledgeDraftRequest supplement : supplements) {
-            KnowledgeCreateRequest request = new KnowledgeCreateRequest();
-            request.setTitle(supplement.getTitle());
-            request.setCategory(supplement.getCategory());
-            request.setDomain(supplement.getDomain());
-            request.setSummary(supplement.getSummary());
-            request.setContent(supplement.getContent());
-            request.setTags(supplement.getTags());
-            request.setMastery("待补充");
-            result.getKnowledgeIds().add(knowledgeService.create(request).getId());
+        for (KnowledgeDraftRequest draft : drafts) {
+            KnowledgeCreateRequest create = new KnowledgeCreateRequest();
+            create.setTitle(draft.getTitle());
+            create.setCategory(draft.getCategory());
+            create.setDomain(draft.getDomain());
+            create.setSummary(draft.getSummary());
+            create.setContent(draft.getContent());
+            create.setTags(draft.getTags());
+            create.setMastery("待补充");
+            result.getKnowledgeIds().add(knowledgeService.create(create).getId());
         }
         return result;
+    }
+
+    /** 草稿页勾选的知识候选。没勾的不回传，回传的才算数。 */
+    private List<KnowledgeDraftRequest> chosenKnowledge(ConversationCommitRequest request) {
+        if (request == null || request.getKnowledgeDrafts() == null) {
+            return List.of();
+        }
+        List<KnowledgeDraftRequest> chosen = new ArrayList<>();
+        for (KnowledgeDraftRequest item : request.getKnowledgeDrafts()) {
+            if (item == null) {
+                continue;
+            }
+            if (!StringUtils.hasText(item.getTitle()) || !StringUtils.hasText(item.getContent())) {
+                continue;
+            }
+            chosen.add(item);
+        }
+        return chosen;
+    }
+
+    private List<KnowledgeDraftRequest> mergedKnowledge(List<KnowledgeDraftRequest> fromMessages, ConversationCommitRequest request) {
+        List<KnowledgeDraftRequest> merged = new ArrayList<>(fromMessages);
+        merged.addAll(chosenKnowledge(request));
+        return merged;
     }
 
     private List<Long> acceptedKnowledgeIds(List<ConversationMessage> messages) {
@@ -582,6 +615,20 @@ public class ConversationServiceImpl implements ConversationService {
             prompt.append(i + 1).append(". ").append(userLines.get(i)).append("\n");
         }
         return prompt.toString();
+    }
+
+    /** 知识候选判定失败只丢候选，不影响草稿本身。 */
+    private List<KnowledgeCandidate> knowledgeCandidates(String prompt) {
+        try {
+            KnowledgeResponse response = conversationModel.knowledge(prompt);
+            if (response == null || response.getKnowledgeCandidates() == null) {
+                return List.of();
+            }
+            return response.getKnowledgeCandidates();
+        } catch (RuntimeException exception) {
+            log.warn("Knowledge candidate generation failed", exception);
+            return List.of();
+        }
     }
 
     private void insertMessage(Long conversationId, String role, String kind, String text, MessagePayload payload) {

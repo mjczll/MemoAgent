@@ -1,2 +1,3 @@
 org.springframework.boot.env.EnvironmentPostProcessor=\
-com.memoagent.config.ProfileFallbackEnvironmentPostProcessor
+com.memoagent.config.ProfileFallbackEnvironmentPostProcessor,\
+com.memoagent.config.AiProviderEnvironmentPostProcessor

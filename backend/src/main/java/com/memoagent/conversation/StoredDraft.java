@@ -33,4 +33,7 @@ public class StoredDraft {
     private String solution;
 
     private String lesson;
+
+    /** 整理时判出的知识候选，用户在草稿页勾选后才写入知识库。 */
+    private List<StoredKnowledgeCandidate> knowledgeCandidates = new ArrayList<>();
 }

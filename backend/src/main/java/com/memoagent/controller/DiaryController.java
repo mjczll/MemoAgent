@@ -1,7 +1,11 @@
 package com.memoagent.controller;
 
+import com.memoagent.ai.DiaryAiService;
+import com.memoagent.ai.DiaryGeneration;
+import com.memoagent.ai.ExperienceExtraction;
 import com.memoagent.common.Result;
 import com.memoagent.dto.DiaryCreateRequest;
+import com.memoagent.dto.DiaryGenerateRequest;
 import com.memoagent.dto.DiaryQuery;
 import com.memoagent.dto.DiaryUpdateRequest;
 import com.memoagent.service.DiaryService;
@@ -25,10 +29,16 @@ import org.springframework.web.bind.annotation.RestController;
 public class DiaryController {
 
     private final DiaryService diaryService;
+    private final DiaryAiService diaryAiService;
 
     @PostMapping
     public Result<DiaryDetailVO> create(@Valid @RequestBody DiaryCreateRequest request) {
         return Result.ok(diaryService.create(request));
+    }
+
+    @PostMapping("/generate")
+    public Result<DiaryGeneration> generate(@Valid @RequestBody DiaryGenerateRequest request) {
+        return Result.ok(diaryAiService.generate(request.getContent()));
     }
 
     @GetMapping
@@ -39,6 +49,11 @@ public class DiaryController {
     @GetMapping("/{id}")
     public Result<DiaryDetailVO> get(@PathVariable Long id) {
         return Result.ok(diaryService.get(id));
+    }
+
+    @PostMapping("/{id}/extract")
+    public Result<ExperienceExtraction> extract(@PathVariable Long id) {
+        return Result.ok(diaryAiService.extract(id));
     }
 
     @PutMapping("/{id}")

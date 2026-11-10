@@ -49,13 +49,14 @@ public final class DraftSanitizer {
         DraftReply source = reply == null ? new DraftReply() : reply;
         List<String> lines = storyLines(userLines);
         String joined = String.join("\n\n", lines);
+        String reference = userLines == null ? "" : String.join("\n", userLines);
         StoredDraft draft = new StoredDraft();
         draft.setIncident(source.isIncident() && !lines.isEmpty());
         draft.setDate(LocalDate.now().toString());
         draft.setTitle(firstText(omitCommands(source.getTitle()), lines.isEmpty() ? "一次对话" : Texts.truncate(lines.get(0), 40)));
         draft.setKind(firstText(omitCommands(source.getKind()), "记录"));
         draft.setDomain(source.getDomain() == null ? "" : Texts.truncate(omitCommands(source.getDomain()), 64));
-        draft.setTags(cleanTags(source.getTags()));
+        draft.setTags(cleanTags(source.getTags(), reference));
         draft.setSummary(firstText(omitCommands(source.getSummary()), Texts.truncate(joined, 60)));
         draft.setContent(firstText(omitCommands(source.getContent()), joined));
         draft.setProblem(firstText(omitCommands(source.getProblem()), lineAt(lines, 2)));
@@ -72,7 +73,7 @@ public final class DraftSanitizer {
         return draft;
     }
 
-    static String omitCommands(String text) {
+    public static String omitCommands(String text) {
         if (text == null || text.isBlank()) {
             return "";
         }
@@ -115,7 +116,7 @@ public final class DraftSanitizer {
         return result.replaceAll("^[，。！？；、\\s]+", "").replaceAll("[，。！？；、\\s]+$", "").trim();
     }
 
-    private static boolean commandOnly(String text) {
+    static boolean commandOnly(String text) {
         String normalized = text.replaceAll("[\\s\\p{Punct}，。！？、；：「」“”‘’]", "");
         if (normalized.isEmpty()) {
             return false;
@@ -132,11 +133,11 @@ public final class DraftSanitizer {
         return hit && rest.isEmpty();
     }
 
-    private static List<String> cleanTags(List<String> tags) {
+    private static List<String> cleanTags(List<String> tags, String reference) {
         if (tags == null) {
             return new ArrayList<>();
         }
-        return new ArrayList<>(Texts.normalizeTags(tags.stream().filter(tag -> !commandOnly(tag)).toList()));
+        return new ArrayList<>(Texts.modelTags(tags.stream().filter(tag -> tag != null && !commandOnly(tag)).toList(), reference));
     }
 
     private static String lineAt(List<String> lines, int index) {

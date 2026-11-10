@@ -1,6 +1,8 @@
 # 发行版。配置名为 prod 时加载本文件。
 # 工程里没有 application-dev.yml 时会自动切到 prod；也可以手动指定 SPRING_PROFILES_ACTIVE=prod。
 # 下面是占位符。发布前改成自己的地址和密钥，这份填好的文件不要放进仓库。
+# 模型用云端还是本机由 application.yml 的 memoagent.ai.provider 决定；
+# 本文件只覆盖发行环境自己的地址、密钥和模型名。
 
 spring:
   datasource:
@@ -15,18 +17,17 @@ spring:
       # 没有密码就留空
       password: Redis密码
   ai:
-    model:
-      # openai 表示走 OpenAI 兼容客户端，请求实际发到 DeepSeek
-      chat: openai
     openai:
-      api-key: DeepSeek密钥
-      # DeepSeek 的 OpenAI 兼容地址。客户端会自己补上 /v1/chat/completions
+      # 远程模型的密钥。地址和模型名见下面的 memoagent.ai.cloud
+      api-key: 远程模型密钥
+
+memoagent:
+  ai:
+    provider: cloud
+    cloud:
+      # OpenAI 兼容地址。Spring AI 1.0.3 会自己补 /v1/chat/completions，这里不要带 /v1
       base-url: https://api.deepseek.com
-      chat:
-        options:
-          # deepseek-chat 为对话模型。推理模型可改成 deepseek-reasoner
-          model: deepseek-chat
-          temperature: 0.4
+      model: deepseek-chat
 
 logging:
   level:
