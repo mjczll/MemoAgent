@@ -9,9 +9,11 @@ import com.memoagent.dto.DiaryGenerateRequest;
 import com.memoagent.dto.DiaryQuery;
 import com.memoagent.dto.DiaryUpdateRequest;
 import com.memoagent.service.DiaryService;
+import com.memoagent.service.SemanticSearchService;
 import com.memoagent.vo.DiaryDetailVO;
 import com.memoagent.vo.DiaryListItemVO;
 import com.memoagent.vo.PageData;
+import com.memoagent.vo.SearchResultVO;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -21,6 +23,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -30,6 +33,7 @@ public class DiaryController {
 
     private final DiaryService diaryService;
     private final DiaryAiService diaryAiService;
+    private final SemanticSearchService semanticSearchService;
 
     @PostMapping
     public Result<DiaryDetailVO> create(@Valid @RequestBody DiaryCreateRequest request) {
@@ -54,6 +58,13 @@ public class DiaryController {
     @PostMapping("/{id}/extract")
     public Result<ExperienceExtraction> extract(@PathVariable Long id) {
         return Result.ok(diaryAiService.extract(id));
+    }
+
+    /** 相似提醒：返回和这篇日记相关的经验 / 日记 / 知识，已排除它自己。 */
+    @GetMapping("/{id}/similar")
+    public Result<SearchResultVO> similar(@PathVariable Long id,
+                                          @RequestParam(required = false) Integer topK) {
+        return Result.ok(semanticSearchService.similarToDiary(id, topK));
     }
 
     @PutMapping("/{id}")

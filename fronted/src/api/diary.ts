@@ -143,3 +143,36 @@ export function generateDiary(content: string): Promise<DiaryGeneration> {
 export function extractDiary(id: string): Promise<{ experiences: ExperienceCandidate[] }> {
   return request<{ experiences: ExperienceCandidate[] }>(`/api/diaries/${id}/extract`, { method: "POST" });
 }
+
+/** 手写日记保存后由后台自动提取的候选，需用户确认才会变成经验。 */
+export interface DiaryCandidate {
+  id: number;
+  diaryId: number;
+  title: string;
+  problem: string;
+  cause?: string | null;
+  solution?: string | null;
+  lesson?: string | null;
+  domain: string;
+  tags: string[];
+  knowledge?: {
+    title: string;
+    category?: string;
+    domain?: string;
+    summary?: string;
+    content?: string;
+    tags?: string[];
+  } | null;
+}
+
+export function listDiaryCandidates(id: string | number): Promise<DiaryCandidate[]> {
+  return request<DiaryCandidate[]>(`/api/diaries/${id}/candidates`);
+}
+
+export function acceptDiaryCandidate(id: number): Promise<number> {
+  return request<number>(`/api/candidates/${id}/accept`, { method: "POST" });
+}
+
+export function ignoreDiaryCandidate(id: number): Promise<void> {
+  return request<null>(`/api/candidates/${id}/ignore`, { method: "POST" }).then(() => undefined);
+}

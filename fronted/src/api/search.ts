@@ -27,3 +27,8 @@ export function semanticSearch(
   if (topK) params.set("topK", String(topK));
   return request<SearchResult>(`/api/search?${params.toString()}`);
 }
+
+/** 日记详情页的相似提醒。后端已排除该日记自身，阈值也比搜索页严格。 */
+export function fetchSimilarDiary(id: string | number, topK = 5): Promise<SearchResult> {
+  return request<SearchResult>(`/api/diaries/${id}/similar?topK=${topK}`);
+}

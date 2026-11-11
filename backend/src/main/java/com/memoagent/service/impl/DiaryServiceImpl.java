@@ -3,6 +3,7 @@ package com.memoagent.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.memoagent.ai.DiaryCreatedEvent;
 import com.memoagent.common.CurrentUser;
 import com.memoagent.common.DiaryKinds;
 import com.memoagent.common.DiaryOrigins;
@@ -77,6 +78,10 @@ public class DiaryServiceImpl implements DiaryService {
 
         List<String> tags = replaceTags(diary.getId(), request.getTags());
         eventPublisher.publishEvent(AssetVectorEvent.upsert(VectorSourceTypes.DIARY, diary.getId()));
+        // 手写日记没有经验卡，交给后台异步提取候选；采访生成的日记在整理阶段已经产出经验
+        if (DiaryOrigins.MANUAL.equals(diary.getOrigin())) {
+            eventPublisher.publishEvent(new DiaryCreatedEvent(diary.getId()));
+        }
         return toDetail(diary, tags);
     }
 

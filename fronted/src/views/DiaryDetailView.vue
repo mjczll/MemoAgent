@@ -45,8 +45,28 @@
           <div class="panel-head"><b>🔗 查看关系图</b><span class="spacer" /><span class="small faint">查看该日记的局部关系网络</span></div>
         </div>
 
+        <div v-if="similar.length" class="panel">
+          <div class="panel-head">
+            <b>相似记录</b>
+            <span class="spacer" />
+            <span class="small faint">{{ similar.length }} 条</span>
+          </div>
+          <div class="panel-body stack" style="gap: 6px">
+            <button
+              v-for="hit in similar"
+              :key="`${hit.kind}-${hit.id}`"
+              class="btn ghost sm"
+              style="justify-content: flex-start; text-align: left; gap: 8px"
+              @click="openSimilar(hit)"
+            >
+              <span style="flex: 1">{{ hit.title }}</span>
+              <span class="small faint">{{ hit.score.toFixed(2) }}</span>
+            </button>
+          </div>
+        </div>
+
         <div class="panel">
-          <div class="panel-head"><b>这篇日记沉淀了什么</b></div>
+          <div class="panel-head"><b>沉淀</b></div>
           <div class="panel-body stack" style="gap: 10px">
             <div>
               <div class="small faint" style="margin-bottom: 6px">经验卡 · {{ experiences.length }}</div>
@@ -61,7 +81,42 @@
                 <p>{{ item.title }}</p>
               </div>
               <p v-if="!experiences.length" class="small faint">还没有提炼出经验卡。</p>
-              <button type="button" class="btn sm" :disabled="extracting || savingExperiences" @click="extract">
+              <div v-if="autoCandidates.length" style="margin: 4px 0 8px">
+                <div class="small faint" style="margin-bottom: 6px">
+                  系统发现 {{ autoCandidates.length }} 条经验候选，确认后才写入
+                </div>
+                <div v-for="item in autoCandidates" :key="item.id" class="kv-item" style="margin-bottom: 10px">
+                  <span>{{ item.domain }}</span>
+                  <p style="font-weight: 500">{{ item.title }}</p>
+                  <p><b>问题</b> {{ item.problem }}</p>
+                  <p v-if="item.lesson"><b>经验</b> {{ item.lesson }}</p>
+                  <div class="row" style="gap: 8px; margin-top: 6px">
+                    <button
+                      type="button"
+                      class="btn sm primary"
+                      :disabled="busyCandidate === item.id"
+                      @click="acceptCandidate(item)"
+                    >
+                      采纳
+                    </button>
+                    <button
+                      type="button"
+                      class="btn sm"
+                      :disabled="busyCandidate === item.id"
+                      @click="ignoreCandidate(item)"
+                    >
+                      忽略
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <button
+                v-if="!experiences.length"
+                type="button"
+                class="btn sm"
+                :disabled="extracting || savingExperiences"
+                @click="extract"
+              >
                 {{ extracting ? "提炼中…" : "从这篇日记提炼经验" }}
               </button>
               <p v-if="extractError" class="small" style="color: var(--danger, #e66); margin: 8px 0 0">{{ extractError }}</p>
@@ -146,11 +201,19 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { extractDiary, type ExperienceCandidate } from "@/api/diary";
+import {
+  acceptDiaryCandidate,
+  extractDiary,
+  ignoreDiaryCandidate,
+  listDiaryCandidates,
+  type DiaryCandidate,
+  type ExperienceCandidate,
+} from "@/api/diary";
 import { createExperience } from "@/api/experience";
 import { errorMessage } from "@/api/http";
+import { fetchSimilarDiary, type SearchHit } from "@/api/search";
 import EmptyState from "@/components/base/EmptyState.vue";
 import MarkdownView from "@/components/base/MarkdownView.vue";
 import ModalDialog from "@/components/base/ModalDialog.vue";
@@ -180,6 +243,70 @@ const extractError = ref("");
 const savingExperiences = ref(false);
 const candidates = ref<OrganizedExperience[]>([]);
 const diary = ref<Diary | undefined>();
+const similar = ref<SearchHit[]>([]);
+const autoCandidates = ref<DiaryCandidate[]>([]);
+const busyCandidate = ref<number | null>(null);
+let candidateTimer: number | null = null;
+
+function clearCandidateTimer() {
+  if (candidateTimer !== null) {
+    window.clearTimeout(candidateTimer);
+    candidateTimer = null;
+  }
+}
+
+/**
+ * 候选由后台异步生成，刚保存完可能还没出来。
+ * 只在手写日记且还没有经验卡时补拉两次，老日记不会每次都多发请求。
+ */
+async function loadCandidates(id: string, retry = 2) {
+  if (!id) return;
+  try {
+    const list = await listDiaryCandidates(id);
+    if (list.length) {
+      autoCandidates.value = list;
+      return;
+    }
+  } catch {
+    // 接口异常就不再重试，避免反复打扰
+    return;
+  }
+  if (retry > 0) {
+    clearCandidateTimer();
+    candidateTimer = window.setTimeout(() => void loadCandidates(id, retry - 1), 4000);
+  }
+}
+
+async function acceptCandidate(item: DiaryCandidate) {
+  if (busyCandidate.value) return;
+  busyCandidate.value = item.id;
+  try {
+    await acceptDiaryCandidate(item.id);
+    autoCandidates.value = autoCandidates.value.filter((row) => row.id !== item.id);
+    await library.refreshExperiences();
+    diary.value = await library.fetchDiary(diaryId.value);
+    ui.toast("已生成经验卡");
+  } catch (error) {
+    ui.toast(errorMessage(error, "采纳失败"), "error");
+  } finally {
+    busyCandidate.value = null;
+  }
+}
+
+async function ignoreCandidate(item: DiaryCandidate) {
+  if (busyCandidate.value) return;
+  busyCandidate.value = item.id;
+  try {
+    await ignoreDiaryCandidate(item.id);
+    autoCandidates.value = autoCandidates.value.filter((row) => row.id !== item.id);
+  } catch (error) {
+    ui.toast(errorMessage(error, "忽略失败"), "error");
+  } finally {
+    busyCandidate.value = null;
+  }
+}
+
+onBeforeUnmount(clearCandidateTimer);
 
 const diaryId = computed(() => String(route.params.id ?? ""));
 const experiences = computed(() => {
@@ -198,13 +325,41 @@ watch(
     candidates.value = [];
     extracted.value = false;
     extractError.value = "";
+    similar.value = [];
+    autoCandidates.value = [];
+    clearCandidateTimer();
     await library.refreshExperiences();
     await library.refreshKnowledge();
     diary.value = id ? await library.fetchDiary(id) : undefined;
     loading.value = false;
+    // 相似提醒是增强信息，不阻塞正文渲染，失败也不提示
+    void loadSimilar(id);
+    // 手写日记且还没有经验卡：候选可能还在后台生成，补拉两次
+    if (diary.value?.origin === "manual" && !experiences.value.length) {
+      void loadCandidates(id);
+    }
   },
   { immediate: true },
 );
+
+async function loadSimilar(id: string) {
+  if (!id) return;
+  try {
+    // 多取几条再筛，这样后端未重启也不会因为过滤而凑不够数
+    const result = await fetchSimilarDiary(id, 8);
+    similar.value = result.available
+      ? result.hits.filter((hit) => hit.kind === "diary").slice(0, 5)
+      : [];
+  } catch {
+    similar.value = [];
+  }
+}
+
+function openSimilar(hit: SearchHit) {
+  if (hit.kind === "diary") router.push(`/diaries/${hit.id}`);
+  else if (hit.kind === "experience") router.push(`/experiences/${hit.id}`);
+  else router.push(`/knowledge/${hit.id}`);
+}
 
 async function removeDiary() {
   const target = diary.value;

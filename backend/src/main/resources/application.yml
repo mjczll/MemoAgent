@@ -91,6 +91,22 @@ memoagent:
     # 必须与建表时的 vector(n) 和 embedding 模型的输出维度三处一致
     dimensions: 1024
     pool-size: 4
+    # 写入失败后的自动补偿：失败入队 → 定时重试 → 超过上限标记 abandoned。
+    # 表结构见 db/vector-task.sql，第一次启用前必须先执行一次该脚本；
+    # 表不存在时补偿任务只会打一条 warn，不影响应用启动和正常保存。
+    retry:
+      enabled: ${MEMOAGENT_VECTOR_RETRY_ENABLED:true}
+      # 启动时比对 MySQL 与向量库，把「有资产、没向量」的登记进队列。
+      # 只入队不 embed，成本是两次查询；数据量特别大时可以关掉，改用 POST /api/vector/reindex。
+      self-check: ${MEMOAGENT_VECTOR_SELF_CHECK:true}
+      # 每轮最多处理多少条到期任务
+      batch-size: 20
+      # 单条最多重试几次，超过后不再自动重试，保留在表里供排查
+      max-attempts: 5
+      # 两轮之间的间隔（毫秒）。fixedDelay：上一轮跑完才开始计时，不会堆积
+      interval-ms: 60000
+      # 启动后延迟多久开始第一轮，避开启动阶段的资源竞争
+      initial-delay-ms: 30000
 
 mybatis-plus:
   configuration:

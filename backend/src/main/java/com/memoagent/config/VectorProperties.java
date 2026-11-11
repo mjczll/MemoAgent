@@ -39,4 +39,32 @@ public class VectorProperties {
 
     /** 连接池上限。向量检索是低频操作，不需要大的池。 */
     private int poolSize = 4;
+
+    /** 写入失败后的自动补偿。关掉就回到「需要手动跑 reindex」的老行为。 */
+    private Retry retry = new Retry();
+
+    @Data
+    public static class Retry {
+
+        /** 总开关。关闭后不注册调度、不重试、也不做启动自检。 */
+        private boolean enabled = true;
+
+        /**
+         * 启动时比对 MySQL 与向量库，把缺失的资产登记进补偿队列。
+         * 只入队不 embed，成本是两次查询；数据量特别大时可以关掉，改用 reindex 手动补。
+         */
+        private boolean selfCheck = true;
+
+        /** 每轮最多处理多少条到期任务。 */
+        private int batchSize = 20;
+
+        /** 单条最多重试几次，超过后标记 abandoned 不再自动重试。 */
+        private int maxAttempts = 5;
+
+        /** 两轮之间的间隔（毫秒），fixedDelay 语义：上一轮跑完才开始计时。 */
+        private long intervalMs = 60_000;
+
+        /** 应用启动后延迟多久开始第一轮，避开启动阶段的资源竞争。 */
+        private long initialDelayMs = 30_000;
+    }
 }
