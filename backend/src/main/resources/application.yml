@@ -22,12 +22,13 @@ spring:
       # 设成 none 可以完全关掉模型：对话仍能保存，只是不会有回复。
       chat: ${MEMOAGENT_AI_CHAT:openai}
 
-# 模型切换。改 provider 这一行即可，不用动启动参数和 profile：
-#   cloud：远程 OpenAI 兼容接口，地址和模型见 cloud 段
+# 对话模型切换。这里是 dev / prod 共用的唯一开关，两个 profile 文件都不再各自写死 provider：
+#   cloud：远程 OpenAI 兼容接口，地址和模型见 cloud 段（各 profile 可覆盖）
 #   local：本机 Ollama，地址和模型见 local 段
-# 也可以不碰文件，启动时设环境变量 MEMOAGENT_AI_PROVIDER=local。
+# 直接改下面 provider 这一行的 local / cloud，改完重启即可，不用动启动参数。
+# 切的是「选型」：连接参数始终取本文件的对应段 + 各 profile 的覆盖项，两套在两个环境里都备着。
 # 密钥不放在这个共用文件里：开发版放 application-dev.yml，发行版放 application-prod.yml。
-# 优先级：命令行参数 > 环境变量 > 各 profile 文件 > 本文件。
+# 优先级：命令行参数 > 环境变量（MEMOAGENT_AI_PROVIDER）> 本文件。
 memoagent:
   ai:
     provider: ${MEMOAGENT_AI_PROVIDER:local}
@@ -44,6 +45,52 @@ memoagent:
       model: ${MEMOAGENT_OLLAMA_MODEL:gemma4:latest}
       # 本地模型指令遵循弱一些，温度调低更稳
       temperature: 0.2
+
+  # 向量化模型单独选源，和上面的对话模型互不绑定。
+  # Spring AI 1.0.3 允许 embedding 用专属 base-url / api-key 覆盖全局连接属性，
+  # 所以「对话走云端 + 向量走本机 Ollama」这类混搭只改这里，不需要额外写 Java 配置。
+  # 这也是 dev / prod 共用的唯一开关：改下面 provider 这一行的 local / cloud，两个环境都听它。
+  #   cloud：阿里云百炼 text-embedding-v3（当前默认，1024 维）；密钥见各 profile 的 cloud.api-key
+  #   local：本机 Ollama bge-m3；需要 ollama pull bge-m3 且 11434 在监听
+  # 环境变量 MEMOAGENT_EMBEDDING_PROVIDER 仍可临时覆盖；改了文件不生效时先检查是否设过它。
+  # 优先级：命令行参数 > 环境变量 > 本文件。
+  embedding:
+    provider: ${MEMOAGENT_EMBEDDING_PROVIDER:local}
+    local:
+      base-url: ${MEMOAGENT_OLLAMA_BASE_URL:http://localhost:11434}
+      api-key: ollama
+      # bge-m3 输出 1024 维，与 vector_asset 的 vector(1024) 对齐
+      model: ${MEMOAGENT_EMBEDDING_MODEL:bge-m3}
+    cloud:
+      # 默认：阿里云百炼的 OpenAI 兼容文本向量（text-embedding-v3）。
+      # 地址不带 /v1 —— Spring AI 会补成 /compatible-mode/v1/embeddings。
+      # 老域名 dashscope.aliyuncs.com 仍可用；若改用带 WorkspaceId 的新域名，整段替换 base-url。
+      base-url: ${MEMOAGENT_EMBEDDING_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode}
+      # 百炼的 DASHSCOPE_API_KEY 与对话接口的密钥不同，必须独立配置，不能沿用全局 key。
+      # 这里是兜底：优先读 MEMOAGENT_EMBEDDING_API_KEY，没设则读 DASHSCOPE_API_KEY；
+      # 两个 profile 文件都留了填写位，想纯靠配置文件就在那里填实际值（共用文件不要写真实密钥）。
+      # 都不设时 cloud 模式启动即报错。若走聚合平台，用三个环境变量覆盖地址 / 模型 ID / Key。
+      api-key: "${MEMOAGENT_EMBEDDING_API_KEY:${DASHSCOPE_API_KEY:}}"
+      # v3 默认输出 1024 维，与 vector_asset 的 vector(1024) 对齐，无需重建表。
+      # 也可换 text-embedding-v4（同样默认 1024 维）。换成非 1024 维模型时，
+      # 要同步改 db/vector-init.sql 与 memoagent.vector.dimensions 并重建表。
+      model: ${MEMOAGENT_CLOUD_EMBEDDING_MODEL:text-embedding-v3}
+
+  # 向量库。只存向量和回指 MySQL 的 source_id，日记/经验/知识的正文与关联仍在 MySQL。
+  # 默认开启：每次启动都会连向量库并校验表，容器没起来会导致启动失败。
+  # 不想连就设环境变量 MEMOAGENT_VECTOR_ENABLED=false 覆盖（优先级最高）。
+  # 注意：dev 和 prod 都会继承这个默认值；若发布环境没有 pgvector 容器，
+  #       需在 application-prod.yml 里单独写 memoagent.vector.enabled: false。
+  vector:
+    enabled: ${MEMOAGENT_VECTOR_ENABLED:true}
+    url: ${MEMOAGENT_VECTOR_URL:jdbc:postgresql://localhost:5433/memoagent_vector}
+    username: ${MEMOAGENT_VECTOR_USERNAME:memoagent}
+    password: ${MEMOAGENT_VECTOR_PASSWORD:memoagent}
+    # 表结构见 db/vector-init.sql，不是 Spring AI 默认的 vector_store
+    table: vector_asset
+    # 必须与建表时的 vector(n) 和 embedding 模型的输出维度三处一致
+    dimensions: 1024
+    pool-size: 4
 
 mybatis-plus:
   configuration:

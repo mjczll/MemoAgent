@@ -207,6 +207,9 @@ function openRef(ref: ConversationRef) {
 async function submitHome() {
   const text = input.value.trim();
   if (!text || store.sending) return;
+  // createConversation 是一次网络请求，这期间 sending 还没被置位。
+  // 先抢锁，避免在这个窗口里连点发出多次同样的请求。
+  store.sending = true;
   await resetComposer();
   try {
     const id = await store.openFromHome(text);
@@ -221,7 +224,7 @@ async function submitHome() {
 
 async function submitThread() {
   const text = input.value.trim();
-  if (!text) return;
+  if (!text || store.sending) return;
   await resetComposer();
   try {
     await store.send(text);

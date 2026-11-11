@@ -41,6 +41,7 @@ import com.memoagent.service.ConversationService;
 import com.memoagent.service.DiaryService;
 import com.memoagent.service.ExperienceService;
 import com.memoagent.service.KnowledgeService;
+import com.memoagent.vector.VectorSourceTypes;
 import com.memoagent.vo.ConversationDetailVO;
 import com.memoagent.vo.ConversationListItemVO;
 import com.memoagent.vo.ConversationMessageVO;
@@ -600,13 +601,57 @@ public class ConversationServiceImpl implements ConversationService {
     }
 
     private String turnPrompt(Long conversationId, String text, List<RecallHit> hits) {
+        List<ConversationMessage> history = messages(conversationId);
+        // 调用方已经把当前这句话插进库了，如果这里再原样列进「已有对话」，
+        // 提示词里同一句话会出现两次（历史末尾 + 下面的「用户刚才说」），
+        // 模型容易把它当成两轮重复输入，从而复述上一轮的答案。
+        int currentIndex = -1;
+        for (int index = history.size() - 1; index >= 0; index -= 1) {
+            ConversationMessage message = history.get(index);
+            if (USER.equals(message.getRole()) && text.equals(message.getText())) {
+                currentIndex = index;
+                break;
+            }
+        }
         StringBuilder prompt = new StringBuilder();
         prompt.append("已有对话：\n");
-        for (ConversationMessage message : messages(conversationId)) {
+        for (int index = 0; index < history.size(); index += 1) {
+            if (index == currentIndex) {
+                continue;
+            }
+            ConversationMessage message = history.get(index);
             prompt.append(message.getRole()).append("：").append(message.getText()).append("\n");
         }
-        prompt.append("用户刚才说：").append(text).append("\n候选记录：").append(writeJson(hits));
+        prompt.append("用户刚才说：").append(text).append("\n");
+        prompt.append("候选记录（用户过去写过的日记、经验和知识，按相关度从高到低）：\n");
+        if (hits == null || hits.isEmpty()) {
+            prompt.append("（无）\n");
+        } else {
+            int order = 1;
+            for (RecallHit hit : hits) {
+                prompt.append(order).append(". ").append(typeLabel(hit.type()))
+                        .append(" #").append(hit.id()).append("｜").append(hit.title());
+                if (StringUtils.hasText(hit.excerpt())) {
+                    prompt.append("｜").append(hit.excerpt());
+                }
+                prompt.append("\n");
+                order += 1;
+            }
+        }
         return prompt.toString();
+    }
+
+    private String typeLabel(String type) {
+        if (VectorSourceTypes.DIARY.equals(type)) {
+            return "日记";
+        }
+        if (VectorSourceTypes.EXPERIENCE.equals(type)) {
+            return "经验";
+        }
+        if (VectorSourceTypes.KNOWLEDGE.equals(type)) {
+            return "知识";
+        }
+        return type;
     }
 
     private String draftPrompt(List<String> userLines) {

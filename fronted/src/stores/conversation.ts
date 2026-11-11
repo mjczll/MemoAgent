@@ -19,6 +19,8 @@ interface ConversationState {
   current: ConversationDetail | null;
   sending: boolean;
   abortController: AbortController | null;
+  /** 首页首条消息的投递锁：openFromHome 和 deliver 之间有一段 await，靠它挡住并发重复投递 */
+  delivering: boolean;
 }
 
 export const useConversationStore = defineStore("conversation", {
@@ -27,6 +29,7 @@ export const useConversationStore = defineStore("conversation", {
     current: null,
     sending: false,
     abortController: null,
+    delivering: false,
   }),
 
   actions: {
@@ -70,7 +73,17 @@ export const useConversationStore = defineStore("conversation", {
     },
 
     async deliver(id: number, text: string) {
-      await this.streamInto(id, text, false);
+      if (this.delivering) {
+        // 已经有一次投递在跑，这次丢弃，并把抢锁时置上的 sending 复位
+        this.sending = false;
+        return;
+      }
+      this.delivering = true;
+      try {
+        await this.streamInto(id, text, false);
+      } finally {
+        this.delivering = false;
+      }
     },
 
     async send(text: string) {

@@ -1,0 +1,71 @@
+# 固定项目名，不随目录名变化。否则换目录或改名后会另起一套容器和网络。
+name: memoagent
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: memoagent-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: memoagent
+      MYSQL_USER: memoagent
+      MYSQL_PASSWORD: memoagent
+    ports:
+      # 本机 3306 常被已有 MySQL 占用，容器对外使用 3307
+      - "3307:3306"
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - memoagent-mysql:/var/lib/mysql
+      # 相对本文件所在目录（docker/），数据文件在仓库根的 db/ 下
+      - ../db/init.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-umemoagent", "-pmemoagent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7
+    container_name: memoagent-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # 向量库：MySQL 存正文与关联，这里只存向量和回指 MySQL 的 source_id
+  pgvector:
+    # 官方镜像，已内置 vector 扩展，不需要自己编译
+    image: pgvector/pgvector:pg17
+    container_name: memoagent-pgvector
+    environment:
+      POSTGRES_DB: memoagent_vector
+      POSTGRES_USER: memoagent
+      POSTGRES_PASSWORD: memoagent
+      # 中文场景下排序与比较都靠 UTF-8，显式指定避免随宿主机漂移
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      # 本机若装过 PostgreSQL 会占用 5432，容器对外统一用 5433
+      - "5433:5432"
+    volumes:
+      - memoagent-pgvector:/var/lib/postgresql/data
+      - ../db/vector-init.sql:/docker-entrypoint-initdb.d/01-vector.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U memoagent -d memoagent_vector"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  # 接管已有数据卷，不在本 compose 内创建，down -v 也不会删除它。
+  # 卷里是 2026-09 起由旧 backend 项目初始化好的库，含现有全部表和业务数据。
+  # 改成 external 之后，本文件成为唯一的 compose 入口，不会再出现两套卷名分裂。
+  memoagent-mysql:
+    external: true
+    name: backend_memoagent-mysql
+
+  # 与项目目录名解耦，避免以后目录改名又变出一个新卷
+  memoagent-pgvector:
+    name: memoagent-pgvector-data

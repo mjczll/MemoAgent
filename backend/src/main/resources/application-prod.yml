@@ -1,8 +1,9 @@
 # 发行版。配置名为 prod 时加载本文件。
 # 工程里没有 application-dev.yml 时会自动切到 prod；也可以手动指定 SPRING_PROFILES_ACTIVE=prod。
 # 下面是占位符。发布前改成自己的地址和密钥，这份填好的文件不要放进仓库。
-# 模型用云端还是本机由 application.yml 的 memoagent.ai.provider 决定；
-# 本文件只覆盖发行环境自己的地址、密钥和模型名。
+# 对话 / 向量用云端还是本机，统一由 application.yml 的两个 provider 开关决定，本文件不写 provider。
+# 本文件只覆盖发行环境自己的地址、密钥和模型名；本地、云端两套连接参数都备齐，切开关即可用
+# （切到 local 需服务器本机运行 Ollama，并已拉好对话模型与 bge-m3）。
 
 spring:
   datasource:
@@ -23,11 +24,19 @@ spring:
 
 memoagent:
   ai:
-    provider: cloud
+    # 不在这里写 provider：统一由 application.yml 的 memoagent.ai.provider 切换（dev / prod 同一个开关）。
     cloud:
       # OpenAI 兼容地址。Spring AI 1.0.3 会自己补 /v1/chat/completions，这里不要带 /v1
       base-url: https://api.deepseek.com
       model: deepseek-chat
+    # local 段不覆盖：沿用 application.yml 的 localhost:11434 / gemma4:latest；
+    # 服务器把 Ollama 装在别处时，在这里加 local.base-url 即可。
+  embedding:
+    cloud:
+      # 百炼 Key 与对话接口密钥不同，必须单独填；或设 DASHSCOPE_API_KEY 环境变量。
+      # 留空且没设环境变量时，cloud 模式启动会直接报错。
+      api-key: ${MEMOAGENT_EMBEDDING_API_KEY:${DASHSCOPE_API_KEY:}}
+    # local 段不覆盖：沿用 application.yml 的 localhost:11434 / bge-m3（需服务器装 Ollama）。
 
 logging:
   level:

@@ -27,7 +27,10 @@ import com.memoagent.service.DiaryService;
 import com.memoagent.vo.DiaryDetailVO;
 import com.memoagent.vo.DiaryListItemVO;
 import com.memoagent.vo.PageData;
+import com.memoagent.vector.AssetVectorEvent;
+import com.memoagent.vector.VectorSourceTypes;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -53,6 +56,7 @@ public class DiaryServiceImpl implements DiaryService {
     private final DiaryExperienceMapper diaryExperienceMapper;
     private final DiaryKnowledgeMapper diaryKnowledgeMapper;
     private final ExperienceMapper experienceMapper;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     @Transactional
@@ -72,6 +76,7 @@ public class DiaryServiceImpl implements DiaryService {
         diaryMapper.insert(diary);
 
         List<String> tags = replaceTags(diary.getId(), request.getTags());
+        eventPublisher.publishEvent(AssetVectorEvent.upsert(VectorSourceTypes.DIARY, diary.getId()));
         return toDetail(diary, tags);
     }
 
@@ -127,6 +132,7 @@ public class DiaryServiceImpl implements DiaryService {
         diaryMapper.updateById(diary);
 
         List<String> tags = replaceTags(id, request.getTags());
+        eventPublisher.publishEvent(AssetVectorEvent.upsert(VectorSourceTypes.DIARY, id));
         return toDetail(diary, tags);
     }
 
@@ -138,8 +144,10 @@ public class DiaryServiceImpl implements DiaryService {
                 Wrappers.<Experience>lambdaQuery().eq(Experience::getDiaryId, id));
         for (Experience experience : experiences) {
             experienceMapper.deleteById(experience.getId());
+            eventPublisher.publishEvent(AssetVectorEvent.delete(VectorSourceTypes.EXPERIENCE, experience.getId()));
         }
         diaryMapper.deleteById(id);
+        eventPublisher.publishEvent(AssetVectorEvent.delete(VectorSourceTypes.DIARY, id));
     }
 
     private Diary requireOwned(Long id) {

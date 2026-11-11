@@ -31,10 +31,12 @@
       </div>
     </div>
 
-    <template v-else>
+    <template v-else-if="submitted">
       <div class="small faint" style="margin-bottom: 10px">
-        「{{ keyword.trim() }}」共命中 {{ total }} 条
+        「{{ submitted }}」共命中 {{ total }} 条<span v-if="loading"> · 检索中…</span>
       </div>
+      <p v-if="notice" class="small faint" style="margin-bottom: 10px">{{ notice }}</p>
+      <p v-if="searchError" class="small faint" style="margin-bottom: 10px">搜索失败：{{ searchError }}</p>
 
       <div class="panel">
         <div v-for="group in groups" :key="group.kind" class="panel-body" style="padding: 0">
@@ -66,7 +68,7 @@
         </div>
 
         <EmptyState
-          v-if="!total"
+          v-if="!total && !loading"
           icon="🔍"
           title="什么都没找到"
           hint="换一个更具体的技术词试试，比如「分布式锁」「Tool Calling」。"
@@ -85,15 +87,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import EmptyState from "@/components/base/EmptyState.vue";
 import PromptChips from "@/components/base/PromptChips.vue";
-import { useLibraryStore } from "@/stores/library";
+import { errorMessage } from "@/api/http";
+import { semanticSearch, type SearchHit } from "@/api/search";
 
 const route = useRoute();
 const router = useRouter();
-const library = useLibraryStore();
 
 const HISTORY_KEY = "memoagent:search:v1";
 const EXAMPLES = ["缓存击穿", "Spring AI", "索引失效", "Tool Calling", "线程池 OOM", "双链笔记"];
@@ -115,6 +117,7 @@ watch(
   () => route.query.q,
   (next) => {
     keyword.value = String(next ?? "");
+    void runSearch(keyword.value);
   },
 );
 
@@ -124,9 +127,39 @@ const KIND_META: Record<string, { label: string; color: string }> = {
   knowledge: { label: "知识条目", color: "#7fd1a8" },
 };
 
-const hits = computed(() =>
-  keyword.value.trim() ? library.search(keyword.value.trim(), 30) : [],
-);
+const hits = ref<SearchHit[]>([]);
+const submitted = ref("");
+const notice = ref("");
+const loading = ref(false);
+const searchError = ref("");
+let latestRequest = 0;
+
+async function runSearch(q: string) {
+  const value = q.trim();
+  const current = ++latestRequest;
+  submitted.value = value;
+  notice.value = "";
+  searchError.value = "";
+  if (!value) {
+    hits.value = [];
+    return;
+  }
+  loading.value = true;
+  try {
+    const result = await semanticSearch(value, undefined, 30);
+    if (current !== latestRequest) return;
+    hits.value = result.hits ?? [];
+    if (!result.available) {
+      notice.value = result.notice || "语义检索暂不可用，请确认向量库已启用";
+    }
+  } catch (error) {
+    if (current !== latestRequest) return;
+    hits.value = [];
+    searchError.value = errorMessage(error, "搜索失败");
+  } finally {
+    if (current === latestRequest) loading.value = false;
+  }
+}
 
 const groups = computed(() =>
   (["diary", "experience", "knowledge"] as const).map((kind) => ({
@@ -138,7 +171,7 @@ const groups = computed(() =>
       .map((hit) => ({
         id: hit.id,
         title: hit.title,
-        reason: hit.reason,
+        reason: `相似度 ${hit.score.toFixed(2)} · ${hit.excerpt || "语义相关"}`,
         to:
           kind === "diary"
             ? `/diaries/${hit.id}`
@@ -160,7 +193,11 @@ function remember() {
   } catch {
     /* 忽略 */
   }
-  router.replace({ path: "/search", query: { q } });
+  if (String(route.query.q ?? "") === q) {
+    void runSearch(q);
+  } else {
+    router.replace({ path: "/search", query: { q } });
+  }
 }
 
 function applyKeyword(value: string) {
@@ -170,8 +207,16 @@ function applyKeyword(value: string) {
 
 function clear() {
   keyword.value = "";
+  submitted.value = "";
+  hits.value = [];
+  notice.value = "";
+  searchError.value = "";
   router.replace({ path: "/search" });
 }
+
+onMounted(() => {
+  void runSearch(keyword.value);
+});
 
 function askInConversation() {
   const q = keyword.value.trim();

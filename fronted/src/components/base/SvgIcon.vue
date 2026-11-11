@@ -13,6 +13,7 @@ type IconName =
   | "experience"
   | "knowledge"
   | "graph"
+  | "search"
   | "settings"
   | "rail-toggle"
   | "rail-collapse"
@@ -79,6 +80,12 @@ const px = computed(() =>
       <circle cx="12.2" cy="4.2" r="1.4" />
       <circle cx="8" cy="11.6" r="1.4" />
       <path d="M4.7 5 7 10.6M11.1 5 8.8 10.6" />
+    </g>
+
+    <!-- search：放大镜 -->
+    <g v-else-if="name === 'search'" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="7" cy="7" r="4.2" />
+      <path d="m10.3 10.3 3 3" />
     </g>
 
     <!-- settings：经典齿轮（8 个梯形齿 + 中心孔） -->

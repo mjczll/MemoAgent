@@ -34,7 +34,10 @@ import com.memoagent.service.ExperienceService;
 import com.memoagent.vo.ExperienceDetailVO;
 import com.memoagent.vo.ExperienceListItemVO;
 import com.memoagent.vo.PageData;
+import com.memoagent.vector.AssetVectorEvent;
+import com.memoagent.vector.VectorSourceTypes;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -66,6 +69,7 @@ public class ExperienceServiceImpl implements ExperienceService {
     private final KnowledgeMapper knowledgeMapper;
     private final KnowledgeTagMapper knowledgeTagMapper;
     private final KnowledgeRelatedMapper knowledgeRelatedMapper;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     @Transactional
@@ -94,6 +98,7 @@ public class ExperienceServiceImpl implements ExperienceService {
             knowledgeIds.add(createSuggestedKnowledge(diary, experience, draft, now));
         }
         replaceKnowledgeLinks(diary.getId(), experience.getId(), knowledgeIds);
+        eventPublisher.publishEvent(AssetVectorEvent.upsert(VectorSourceTypes.EXPERIENCE, experience.getId()));
         return toDetail(experience, diary.getTitle(), tags, knowledgeIds);
     }
 
@@ -154,6 +159,7 @@ public class ExperienceServiceImpl implements ExperienceService {
         List<Long> knowledgeIds = ownedKnowledgeIds(request.getKnowledgeIds());
         replaceKnowledgeLinks(experience.getDiaryId(), id, knowledgeIds);
         Diary diary = diaryMapper.selectById(experience.getDiaryId());
+        eventPublisher.publishEvent(AssetVectorEvent.upsert(VectorSourceTypes.EXPERIENCE, id));
         return toDetail(experience, diary == null ? null : diary.getTitle(), tags, knowledgeIds);
     }
 
@@ -241,6 +247,8 @@ public class ExperienceServiceImpl implements ExperienceService {
         knowledgeMapper.insert(knowledge);
         replaceKnowledgeTags(knowledge.getId(), draft.getTags() == null ? List.of() : draft.getTags());
         replaceRelated(knowledge.getId(), draft.getRelatedIds());
+        // 这里直接写 knowledge 表、绕过 KnowledgeService，必须自己补发一条向量事件
+        eventPublisher.publishEvent(AssetVectorEvent.upsert(VectorSourceTypes.KNOWLEDGE, knowledge.getId()));
         return knowledge.getId();
     }
 

@@ -63,6 +63,15 @@
             <artifactId>mysql-connector-j</artifactId>
             <scope>runtime</scope>
         </dependency>
+        <!-- 向量库连接。PgVectorRepository 直接 import 了 org.postgresql.util.PGobject，
+             属于编译期依赖，不能用 runtime scope，否则 javac 报「程序包不存在」。
+             只加驱动，不加 spring-ai-starter-vector-store-pgvector：
+             那个 starter 会用主数据源（MySQL）自动装配 PgVectorStore，启动即失败；
+             而且它要求固定的 vector_store 表结构，和本项目带 source_id 列的设计冲突。 -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-starter-model-openai</artifactId>

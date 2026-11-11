@@ -95,7 +95,7 @@ onMounted(() => {
 interface NavItem {
   to: string;
   label: string;
-  icon: "home" | "interview" | "agent" | "diary" | "experience" | "knowledge" | "graph" | "settings";
+  icon: "home" | "interview" | "agent" | "diary" | "experience" | "knowledge" | "graph" | "search" | "settings";
 }
 
 const mainNav = computed<NavItem[]>(() => [
@@ -107,6 +107,7 @@ const assetNav = computed<NavItem[]>(() => [
   { to: "/experiences", label: "经验", icon: "experience" },
   { to: "/knowledge", label: "知识库", icon: "knowledge" },
   { to: "/graph", label: "关系图谱", icon: "graph" },
+  { to: "/search", label: "搜索", icon: "search" },
 ]);
 
 function isActive(item: { to: string }): boolean {

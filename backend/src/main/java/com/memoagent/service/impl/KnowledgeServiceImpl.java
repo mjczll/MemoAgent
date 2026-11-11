@@ -27,7 +27,10 @@ import com.memoagent.service.KnowledgeService;
 import com.memoagent.vo.KnowledgeDetailVO;
 import com.memoagent.vo.KnowledgeListItemVO;
 import com.memoagent.vo.PageData;
+import com.memoagent.vector.AssetVectorEvent;
+import com.memoagent.vector.VectorSourceTypes;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -54,6 +57,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
     private final ExperienceKnowledgeMapper experienceKnowledgeMapper;
     private final ExperienceMapper experienceMapper;
     private final DiaryKnowledgeMapper diaryKnowledgeMapper;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     @Transactional
@@ -71,6 +75,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         List<String> tags = replaceTags(knowledge.getId(), request.getTags());
         List<Long> relatedIds = replaceRelated(knowledge.getId(), request.getRelatedIds());
         List<Long> sourceIds = replaceSources(knowledge.getId(), request.getSourceExperienceIds());
+        eventPublisher.publishEvent(AssetVectorEvent.upsert(VectorSourceTypes.KNOWLEDGE, knowledge.getId()));
         return toDetail(knowledge, tags, relatedIds, sourceIds);
     }
 
@@ -134,6 +139,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         List<Long> sourceIds = request.getSourceExperienceIds() == null
                 ? loadSourceIds(List.of(id)).getOrDefault(id, List.of())
                 : replaceSources(id, request.getSourceExperienceIds());
+        eventPublisher.publishEvent(AssetVectorEvent.upsert(VectorSourceTypes.KNOWLEDGE, id));
         return toDetail(knowledge, tags, relatedIds, sourceIds);
     }
 
@@ -150,6 +156,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         diaryKnowledgeMapper.delete(Wrappers.<DiaryKnowledge>lambdaQuery()
                 .eq(DiaryKnowledge::getKnowledgeId, id));
         knowledgeMapper.deleteById(id);
+        eventPublisher.publishEvent(AssetVectorEvent.delete(VectorSourceTypes.KNOWLEDGE, id));
     }
 
     private void applyFields(Knowledge knowledge, String title, String category, String domain,

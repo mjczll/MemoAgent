@@ -9,9 +9,14 @@ import com.memoagent.entity.Knowledge;
 import com.memoagent.mapper.DiaryMapper;
 import com.memoagent.mapper.ExperienceMapper;
 import com.memoagent.mapper.KnowledgeMapper;
+import com.memoagent.service.SemanticSearchService;
+import com.memoagent.vo.SearchHitVO;
+import com.memoagent.vo.SearchResultVO;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -19,17 +24,60 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class ConversationRecall {
 
+    /** 采访提示词里的候选记录条数上限，避免把上下文撑满。 */
+    private static final int RECALL_TOP_K = 8;
+
+    /**
+     * 给模型的引用正文长度。搜索页只展示 80 字，但「回顾」要靠这段内容复述上次的做法，
+     * 80 字往往只够说清标题，模型只能反问用户，所以要放宽。
+     */
+    private static final int RECALL_EXCERPT_MAX = 240;
+
     private final DiaryMapper diaryMapper;
     private final ExperienceMapper experienceMapper;
     private final KnowledgeMapper knowledgeMapper;
+    private final SemanticSearchService semanticSearchService;
 
     private static final List<String> STOP_WORDS = stopWords();
 
+    /**
+     * 阶段 6：「关联到这次」的候选从关键词匹配换成语义检索。
+     * 候选仍然只来自 MySQL 里真实存在的资产，按钮和「点过才写入」的规则不变，
+     * 也不会因此把两篇日记或两张经验连成关系。
+     * <p>
+     * 向量库没开、模型不可用或检索抛异常时退回关键词实现，保证采访联想不空白；
+     * 这是故障兜底，不是 Hybrid Search（混合检索是文档第 15 节的后置项）。
+     */
     public List<RecallHit> find(String text) {
+        if (!StringUtils.hasText(text)) {
+            return List.of();
+        }
+        try {
+            SearchResultVO result = semanticSearchService.search(text, null, RECALL_TOP_K, null, RECALL_EXCERPT_MAX);
+            if (!result.isAvailable()) {
+                return findByKeywords(text);
+            }
+            List<RecallHit> hits = new ArrayList<>();
+            for (SearchHitVO hit : result.getHits()) {
+                if (hit.getId() == null) {
+                    continue;
+                }
+                hits.add(new RecallHit(hit.getKind(), hit.getId(), hit.getTitle(), hit.getExcerpt()));
+            }
+            return hits;
+        } catch (RuntimeException exception) {
+            log.warn("语义召回失败，改用关键词兜底", exception);
+            return findByKeywords(text);
+        }
+    }
+
+    /** 关键词兜底：仍按阶段 3 的要求把词拆开搜，不把整句话当一个 LIKE。 */
+    private List<RecallHit> findByKeywords(String text) {
         List<String> keywords = keywords(text);
         if (keywords.isEmpty()) {
             return List.of();
