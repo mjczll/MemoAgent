@@ -2,6 +2,7 @@ package com.memoagent.controller;
 
 import com.memoagent.common.Result;
 import com.memoagent.conversation.CommitResult;
+import com.memoagent.conversation.ConversationTitleStream;
 import com.memoagent.dto.ConversationChoiceRequest;
 import com.memoagent.dto.ConversationCommitRequest;
 import com.memoagent.dto.ConversationCreateRequest;
@@ -31,6 +32,7 @@ import java.util.List;
 public class ConversationController {
 
     private final ConversationService conversationService;
+    private final ConversationTitleStream conversationTitleStream;
 
     @PostMapping
     public Result<ConversationDetailVO> create(@RequestBody(required = false) ConversationCreateRequest request) {
@@ -51,6 +53,15 @@ public class ConversationController {
     public Result<Void> delete(@PathVariable Long id) {
         conversationService.delete(id);
         return Result.ok(null);
+    }
+
+    /**
+     * 标题推送：连上后等后端生成完标题再推 {@code title} 事件，然后断开。
+     * 标题已经存在时立刻推一次并结束，前端不必区分「等」与「已有」。
+     */
+    @GetMapping("/{id}/title/stream")
+    public SseEmitter titleStream(@PathVariable Long id) {
+        return conversationTitleStream.subscribe(id);
     }
 
     /** 重命名。只改标题，不刷新更新时间。 */

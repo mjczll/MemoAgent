@@ -17,9 +17,11 @@ import com.memoagent.conversation.DraftReply;
 import com.memoagent.conversation.DraftSanitizer;
 import com.memoagent.conversation.KnowledgeCandidateSanitizer;
 import com.memoagent.conversation.KnowledgeResponse;
+import com.memoagent.conversation.AssetQueryTools;
 import com.memoagent.conversation.MessagePayload;
 import com.memoagent.conversation.OrganizeReady;
 import com.memoagent.conversation.RecallHit;
+import com.memoagent.conversation.TurnAssetTools;
 import com.memoagent.conversation.TurnTools;
 import com.memoagent.conversation.StoredDraft;
 import com.memoagent.conversation.StoredKnowledgeCandidate;
@@ -87,6 +89,7 @@ public class ConversationServiceImpl implements ConversationService {
     private final ConversationMessageMapper messageMapper;
     private final ConversationModel conversationModel;
     private final ConversationRecall conversationRecall;
+    private final AssetQueryTools assetQueryTools;
     private final ConversationTitleService conversationTitleService;
     private final DiaryService diaryService;
     private final ExperienceService experienceService;
@@ -241,7 +244,9 @@ public class ConversationServiceImpl implements ConversationService {
                 disposable.dispose();
             }
         });
-        subscription.set(conversationModel.streamReply(prompt, tools).subscribe(
+        // 只读查询按轮包装：listAssets 的结果要同时进 refs，页面才有引用胶囊
+        TurnAssetTools assetTools = new TurnAssetTools(assetQueryTools, tools);
+        subscription.set(conversationModel.streamReply(prompt, tools, assetTools).subscribe(
                 token -> {
                     if (token != null && !token.isEmpty()) {
                         // visible 保留原始内容，收尾时统一清洗；推到前端的先剥掉工具标记
@@ -684,6 +689,8 @@ public class ConversationServiceImpl implements ConversationService {
             }
         }
         StringBuilder prompt = new StringBuilder();
+        // 模型不知道今天几号，没有这句就换算不出「这个月」「最近两周」
+        prompt.append("今天是 ").append(LocalDate.now()).append("。\n");
         prompt.append("已有对话：\n");
         for (int index = 0; index < history.size(); index += 1) {
             if (index == currentIndex) {

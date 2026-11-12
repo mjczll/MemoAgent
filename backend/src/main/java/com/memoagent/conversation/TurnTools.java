@@ -159,6 +159,37 @@ public class TurnTools {
         }
     }
 
+    /**
+     * 把「按时间列出的记录」全部登记成引用，不设上限。
+     * <p>
+     * 与 citeRecords 的区别：那条路只收本轮语义召回的候选 id，
+     * 而复盘查的是整段时间的记录，本来就不在候选里，所以这里不做 id 白名单校验。
+     * 条数由 listAssets 的 limit 决定（默认 30、最多 60），
+     * 也就是「列出多少就挂多少」，不做二次截断，避免正文讲到的记录在抽屉里找不到。
+     */
+    public void citeListing(List<AssetQueryTools.Row> rows) {
+        if (rows == null) {
+            return;
+        }
+        for (AssetQueryTools.Row row : rows) {
+            String type = row.kind();
+            if (!"diary".equals(type) && !"experience".equals(type) && !"knowledge".equals(type)) {
+                continue;
+            }
+            boolean exists = refs.stream()
+                    .anyMatch(item -> type.equals(item.getType()) && row.id().equals(item.getId()));
+            if (exists) {
+                continue;
+            }
+            MessagePayload.RefPayload ref = new MessagePayload.RefPayload();
+            ref.setType(type);
+            ref.setId(row.id());
+            ref.setTitle(row.title());
+            ref.setExcerpt(row.excerpt());
+            refs.add(ref);
+        }
+    }
+
     private static boolean containsStrong(RecallHit hit, List<String> strong) {
         String haystack = (hit.title() == null ? "" : hit.title()) + (hit.excerpt() == null ? "" : hit.excerpt());
         for (String keyword : strong) {

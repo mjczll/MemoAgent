@@ -13,6 +13,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
 
 /**
@@ -40,7 +43,12 @@ public class ConversationTitleService {
      */
     private static final int MIN_TITLE_CHARS = 2;
 
-    private static final int MAX_TITLE_CHARS = 20;
+    /**
+     * 标题上限。20 字会误杀「热点Key过期引发的缓存击穿故障排查与优化总结」这类
+     * 内容正确但偏长的标题——丢掉一个好标题，代价是这条会话永远停在「新对话」。
+     * 现在放宽到 24，更长的截断而不是丢弃。
+     */
+    private static final int MAX_TITLE_CHARS = 24;
 
     /** 一眼能看出是「照抄原话」的下限：太短的同名片段不算抄袭（例如「缓存」）。 */
     private static final int COPY_CHECK_CHARS = 6;
@@ -49,14 +57,27 @@ public class ConversationTitleService {
 
     private static final Pattern PREFIX = Pattern.compile("^(标题|题目|title)\\s*[:：]\\s*", Pattern.CASE_INSENSITIVE);
 
+    /** 起标题是后台任务，超时就放弃：单线程池被一个卡住的调用占住，后面所有会话都排不上 */
+    private static final long TITLE_TIMEOUT_SECONDS = 25;
+
     private static final String QUOTES = "「」『』“”‘’\"'《》";
 
     /** 这些词出现在标题开头，说明模型把「谁在说」写进去了，不是内容主体。 */
     private static final List<String> BAD_STARTS = List.of("用户", "请问", "帮我", "这是一段", "这段对话");
 
+    /**
+     * 压缩标题时优先摘掉的尾巴：信息量低，去掉之后更像「内容主体」而不是「作业题目」。
+     * 顺序有意义，先长后短，避免「的总结」被「总结」抢先匹配掉一半。
+     */
+    private static final List<String> TRIM_SUFFIXES = List.of(
+            "的总结", "的回顾", "的梳理", "的整理", "的记录", "的分析",
+            "与优化", "与总结", "与回顾", "及优化",
+            "总结", "回顾", "梳理", "整理", "汇总", "记录", "心得");
+
     private final ConversationMapper conversationMapper;
     private final ConversationMessageMapper messageMapper;
     private final ConversationModel conversationModel;
+    private final ConversationTitleStream titleStream;
 
     /**
      * 首轮结束后调用。不阻塞调用方，异常全部吞掉——标题只是锦上添花，不能影响对话。
@@ -78,14 +99,30 @@ public class ConversationTitleService {
             if (!StringUtils.hasText(question) || !StringUtils.hasText(answer)) {
                 log.info("会话 #{} 还没有一问一答，跳过起标题（user={}，assistant={}）",
                         conversationId, StringUtils.hasText(question), StringUtils.hasText(answer));
+                titleStream.close(conversationId);
                 return;
             }
             log.info("会话 #{} 开始生成标题，问题长度 {}", conversationId, question.length());
-            String raw = conversationModel.title(prompt(question, answer));
+            String raw;
+            try {
+                raw = CompletableFuture
+                        .supplyAsync(() -> conversationModel.title(prompt(question, answer)))
+                        .get(TITLE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            } catch (TimeoutException timeout) {
+                log.warn("会话 #{} 生成标题超时（{} 秒），保持「{}」",
+                        conversationId, TITLE_TIMEOUT_SECONDS, PLACEHOLDER);
+                return;
+            } catch (Exception failure) {
+                throw new IllegalStateException("标题模型调用失败", failure);
+            }
             String title = sanitize(raw, question);
             if (title == null) {
                 // 不打 debug：标题没生成时最需要知道原因，而这段一轮只跑一次
-                log.info("会话 #{} 的标题未通过校验，保持「{}」：{}", conversationId, PLACEHOLDER, raw);
+                log.info("会话 #{} 的标题未通过校验，保持「{}」：{}（{} 字）",
+                        conversationId, PLACEHOLDER, raw,
+                        raw == null ? 0 : raw.strip().codePointCount(0, raw.strip().length()));
+                // 断开等待中的连接，前端不必为一个不会来的标题挂到超时
+                titleStream.close(conversationId);
                 return;
             }
             int updated = conversationMapper.update(null, Wrappers.<Conversation>lambdaUpdate()
@@ -94,9 +131,12 @@ public class ConversationTitleService {
                     .set(Conversation::getTitle, title));
             if (updated > 0) {
                 log.info("会话标题已生成：#{} → {}", conversationId, title);
+                // 推给还在等这条会话标题的页面，前端不用再轮询
+                titleStream.publish(conversationId, title);
             }
         } catch (Exception exception) {
             log.warn("会话标题生成失败，保持占位符：#{}", conversationId, exception);
+            titleStream.close(conversationId);
         }
     }
 
@@ -140,8 +180,14 @@ public class ConversationTitleService {
             return null;
         }
         int length = text.codePointCount(0, text.length());
-        if (length < MIN_TITLE_CHARS || length > MAX_TITLE_CHARS) {
+        if (length < MIN_TITLE_CHARS) {
             return null;
+        }
+        if (length > MAX_TITLE_CHARS) {
+            // 模型算不准字数（它按 token 采样，不数字），所以「刚好符合」只能在这里保证：
+            // 先摘掉「总结 / 回顾」这类尾巴，实在还长才硬截断，比丢回「新对话」有用得多
+            text = compact(text, MAX_TITLE_CHARS);
+            length = text.codePointCount(0, text.length());
         }
         for (String bad : BAD_STARTS) {
             if (text.startsWith(bad)) {
@@ -157,6 +203,42 @@ public class ConversationTitleService {
             return null;
         }
         return text;
+    }
+
+    /**
+     * 把过长的标题压到上限以内。
+     * <p>
+     * 先按顺序摘掉常见尾巴（「的总结」「与优化」这类词信息量低、去掉后更像标题），
+     * 摘不动了再硬截断。这样「热点Key过期引发的缓存击穿故障排查与优化总结」
+     * 会变成「热点Key过期引发的缓存击穿故障排查」，而不是在半截词上断开。
+     */
+    private String compact(String text, int max) {
+        String value = text;
+        for (int round = 0; round < TRIM_SUFFIXES.size(); round += 1) {
+            if (value.codePointCount(0, value.length()) <= max) {
+                break;
+            }
+            String matched = null;
+            for (String suffix : TRIM_SUFFIXES) {
+                if (value.endsWith(suffix)
+                        && value.codePointCount(0, value.length() - suffix.length()) >= MIN_TITLE_CHARS) {
+                    matched = suffix;
+                    break;
+                }
+            }
+            if (matched == null) {
+                break;
+            }
+            value = value.substring(0, value.length() - matched.length()).strip();
+        }
+        // 摘完尾巴常留一个「的」「与」，一并去掉
+        while (value.length() > MIN_TITLE_CHARS && "的与和之".indexOf(value.charAt(value.length() - 1)) >= 0) {
+            value = value.substring(0, value.length() - 1).strip();
+        }
+        if (value.codePointCount(0, value.length()) > max) {
+            value = value.substring(0, max - 1).strip() + "…";
+        }
+        return value;
     }
 
     private String stripQuotes(String text) {

@@ -6,3 +6,5 @@
 /.cursor/
 /backend/src/main/resources/application-dev.yml
 /.workbuddy/
+# 后端运行日志（logging.file.name 指向这里）
+/logs/

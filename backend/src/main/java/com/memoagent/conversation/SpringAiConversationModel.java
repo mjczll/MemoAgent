@@ -14,18 +14,13 @@ public class SpringAiConversationModel implements ConversationModel {
 
     private final ChatClient chatClient;
 
-    /** 无状态的只读查询工具，每轮都挂上，让模型能自己决定要不要翻库。 */
-    private final AssetQueryTools assetQueryTools;
-
     /**
      * 启动时把实际生效的模型和地址打到日志，切换本地/云端后可以直接从日志确认连的是哪个。
      */
     public SpringAiConversationModel(ChatClient.Builder builder,
-                                     AssetQueryTools assetQueryTools,
                                      @Value("${spring.ai.openai.base-url:未配置}") String baseUrl,
                                      @Value("${spring.ai.openai.chat.options.model:未配置}") String model) {
         this.chatClient = builder.build();
-        this.assetQueryTools = assetQueryTools;
         log.info("模型已就绪：{} @ {}（{}）", model, baseUrl, isLocal(baseUrl) ? "本地" : "远程");
     }
 
@@ -48,12 +43,12 @@ public class SpringAiConversationModel implements ConversationModel {
     }
 
     @Override
-    public Flux<String> streamReply(String prompt, Object tools) {
+    public Flux<String> streamReply(String prompt, Object turnTools, Object assetTools) {
         return chatClient.prompt()
                 .system(ConversationPrompts.TURN_STREAM)
                 .user(prompt)
-                // 本轮的业务工具（TurnTools，带命中候选与 payload 状态）+ 常驻的只读查询工具
-                .tools(tools, assetQueryTools)
+                // 本轮的业务工具（TurnTools，带命中候选与 payload 状态）+ 本轮的只读查询工具
+                .tools(turnTools, assetTools)
                 .stream()
                 .content();
     }

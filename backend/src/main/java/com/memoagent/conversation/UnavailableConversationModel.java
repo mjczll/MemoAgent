@@ -20,7 +20,7 @@ public class UnavailableConversationModel implements ConversationModel {
     }
 
     @Override
-    public Flux<String> streamReply(String prompt, Object tools) {
+    public Flux<String> streamReply(String prompt, Object turnTools, Object assetTools) {
         return Flux.just(ConversationPrompts.unavailableText());
     }
 

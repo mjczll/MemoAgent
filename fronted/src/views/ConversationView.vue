@@ -175,13 +175,12 @@
         <button
           class="dock-send"
           type="button"
-          :disabled="!store.sending && !input.trim()"
-          :title="store.sending ? '停止' : '发送'"
-          :aria-label="store.sending ? '停止' : '发送'"
-          @click="store.sending ? store.stop() : submitHome()"
+          :disabled="!input.trim() || starting"
+          title="发送"
+          aria-label="发送"
+          @click="submitHome()"
         >
-          <span v-if="store.sending" class="dock-stop" />
-          <template v-else>↑</template>
+          ↑
         </button>
       </div>
     </section>
@@ -207,6 +206,8 @@ const store = useConversationStore();
 const library = useLibraryStore();
 const ui = useUiStore();
 const input = ref("");
+/** 首页创建对话的防连点锁，和「当前会话是否在输出」无关 */
+const starting = ref(false);
 const composerRef = ref<HTMLTextAreaElement | null>(null);
 const drafting = ref(false);
 const scrollRef = ref<HTMLElement | null>(null);
@@ -440,20 +441,29 @@ async function submitEdit(message: { id: number }) {
 
 async function submitHome() {
   const text = input.value.trim();
-  if (!text || store.sending) return;
-  // createConversation 是一次网络请求，这期间 sending 还没被置位。
-  // 先抢锁，避免在这个窗口里连点发出多次同样的请求。
-  store.sending = true;
+  // 首页不拦截「另一条对话正在输出」：这里只为创建请求本身防连点
+  if (!text || starting.value) return;
+  starting.value = true;
   await resetComposer();
+  let id: number;
   try {
-    const id = await store.openFromHome(text);
-    await router.push(`/c/${id}`);
-    await store.deliver(id, text);
+    id = await store.openFromHome(text);
   } catch (error) {
-    if (isAbortError(error)) return;
-    store.sending = false;
-    ui.toast(errorMessage(error, "发送失败"), "error");
+    starting.value = false;
+    if (!isAbortError(error)) {
+      ui.toast(errorMessage(error, "发送失败"), "error");
+    }
+    return;
   }
+  // 创建完成就解锁：首页和对话页是同一个组件，路由切换不会重置状态，
+  // 若把锁挂到整段回复结束，回到首页时按钮会一直停在禁用/停止态
+  starting.value = false;
+  await router.push(`/c/${id}`);
+  void store.deliver(id, text).catch((error) => {
+    if (!isAbortError(error)) {
+      ui.toast(errorMessage(error, "发送失败"), "error");
+    }
+  });
 }
 
 async function submitThread() {

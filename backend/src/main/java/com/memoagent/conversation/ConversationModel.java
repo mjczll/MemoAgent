@@ -8,7 +8,7 @@ public interface ConversationModel {
 
     TurnReply reply(String prompt);
 
-    Flux<String> streamReply(String prompt, Object tools);
+    Flux<String> streamReply(String prompt, Object turnTools, Object assetTools);
 
     DraftReply draft(String prompt);
 

@@ -131,8 +131,52 @@ export async function streamConversationMessage(
   return streamPost(`/api/conversations/${id}/messages/stream`, { text }, onToken, signal);
 }
 
-/** 重新生成最后一条回复：后端会丢弃它，重跑同一轮 */
-export function regenerateConversation(
+/**
+ * 等后端把标题生成完。
+ * 连上后挂一条 SSE，收到 `title` 事件就返回；标题已存在时后端会立刻推一次。
+ * 超时或断线返回 null，由调用方静默处理。
+ */
+export async function streamConversationTitle(
+  id: number | string,
+  signal?: AbortSignal,
+): Promise<string | null> {
+  let response: Response;
+  try {
+    response = await fetch(`/api/conversations/${id}/title/stream`, {
+      headers: { Accept: "text/event-stream" },
+      signal,
+    });
+  } catch {
+    return null;
+  }
+  if (!response.ok || !response.body) {
+    return null;
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let title: string | null = null;
+  try {
+    while (!title) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      buffer += decoder.decode(chunk.value, { stream: true });
+      const parts = buffer.split("\n\n");
+      buffer = parts.pop() ?? "";
+      for (const part of parts) {
+        const parsed = parseSse(part);
+        if (parsed.event !== "title" || !parsed.data) continue;
+        const payload = JSON.parse(parsed.data) as { title?: string };
+        if (payload.title) title = payload.title;
+      }
+    }
+  } finally {
+    void reader.cancel().catch(() => undefined);
+  }
+  return title;
+}
+
+/** 重新生成最后一条回复：后端会丢弃它，重跑同一轮 */export function regenerateConversation(
   id: number | string,
   onToken: (chunk: string) => void,
   signal?: AbortSignal,
