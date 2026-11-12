@@ -12,6 +12,7 @@ import com.memoagent.conversation.CommitResult;
 import com.memoagent.conversation.ConversationModel;
 import com.memoagent.conversation.ConversationPrompts;
 import com.memoagent.conversation.ConversationRecall;
+import com.memoagent.conversation.ConversationTitleService;
 import com.memoagent.conversation.DraftReply;
 import com.memoagent.conversation.DraftSanitizer;
 import com.memoagent.conversation.KnowledgeCandidateSanitizer;
@@ -80,12 +81,13 @@ public class ConversationServiceImpl implements ConversationService {
     private static final String ASSISTANT = "assistant";
     private static final String ACCEPT = "accept";
     private static final String SKIP = "skip";
-    private static final String DEFAULT_TITLE = "新的对话";
+    private static final String DEFAULT_TITLE = ConversationTitleService.PLACEHOLDER;
 
     private final ConversationMapper conversationMapper;
     private final ConversationMessageMapper messageMapper;
     private final ConversationModel conversationModel;
     private final ConversationRecall conversationRecall;
+    private final ConversationTitleService conversationTitleService;
     private final DiaryService diaryService;
     private final ExperienceService experienceService;
     private final KnowledgeService knowledgeService;
@@ -162,9 +164,50 @@ public class ConversationServiceImpl implements ConversationService {
     public SseEmitter stream(Long id, String text) {
         Conversation conversation = requireOpen(id);
         insertMessage(conversation.getId(), USER, TurnSanitizer.INTERVIEW, text, null);
-        if (DEFAULT_TITLE.equals(conversation.getTitle())) {
-            conversation.setTitle(Texts.truncate(text, 24));
+        return runTurn(conversation, text);
+    }
+
+    /**
+     * 重新生成：保留最后一条用户消息，删掉它之后的助手回复，再用同一句话跑一轮。
+     * turnPrompt 会把「当前这句话」从历史里跳过，所以不会出现重复两遍。
+     */
+    @Override
+    public SseEmitter regenerate(Long id) {
+        Conversation conversation = requireOpen(id);
+        ConversationMessage lastUser = messages(id).stream()
+                .filter(message -> USER.equals(message.getRole()))
+                .reduce((first, second) -> second)
+                .orElseThrow(() -> BusinessException.badRequest("还没有可以重新生成的内容"));
+        dropAfter(id, lastUser.getId());
+        return runTurn(conversation, lastUser.getText());
+    }
+
+    @Override
+    public SseEmitter editStream(Long id, Long messageId, String text) {
+        Conversation conversation = requireOpen(id);
+        ConversationMessage message = messageMapper.selectById(messageId);
+        if (message == null || !id.equals(message.getConversationId()) || !USER.equals(message.getRole())) {
+            throw BusinessException.notFound("消息不存在");
         }
+        if (!StringUtils.hasText(text)) {
+            throw BusinessException.badRequest("内容不能为空");
+        }
+        message.setText(text.trim());
+        messageMapper.updateById(message);
+        // 改写历史后，之后的问答全部作废——和多数聊天工具的行为一致
+        dropAfter(id, messageId);
+        return runTurn(conversation, text.trim());
+    }
+
+    /** 删掉某条消息之后的所有消息（含助手回复）。消息 id 自增，按 id 比较即可。 */
+    private void dropAfter(Long conversationId, Long messageId) {
+        messageMapper.delete(Wrappers.<ConversationMessage>lambdaQuery()
+                .eq(ConversationMessage::getConversationId, conversationId)
+                .gt(ConversationMessage::getId, messageId));
+    }
+
+    /** 一轮问答的流式执行：召回、拼提示词、调模型、收尾落库。新发、重生成、改后重发共用。 */
+    private SseEmitter runTurn(Conversation conversation, String text) {
         if (DRAFTED.equals(conversation.getStatus())) {
             conversation.setStatus(ACTIVE);
         }
@@ -314,9 +357,6 @@ public class ConversationServiceImpl implements ConversationService {
     private ConversationDetailVO sendText(Long id, String text) {
         Conversation conversation = requireOpen(id);
         insertMessage(conversation.getId(), USER, TurnSanitizer.INTERVIEW, text, null);
-        if (DEFAULT_TITLE.equals(conversation.getTitle())) {
-            conversation.setTitle(Texts.truncate(text, 24));
-        }
         List<RecallHit> hits = conversationRecall.find(text);
         TurnSanitizer.SanitizedTurn turn = produceTurn(conversation.getId(), text, hits);
         insertMessage(conversation.getId(), ASSISTANT, turn.kind(),
@@ -325,6 +365,7 @@ public class ConversationServiceImpl implements ConversationService {
             conversation.setStatus(ACTIVE);
         }
         touch(conversation);
+        offerTitle(conversation);
         return detail(conversation);
     }
 
@@ -381,6 +422,7 @@ public class ConversationServiceImpl implements ConversationService {
             }
             insertMessage(conversation.getId(), ASSISTANT, kind, text, payload);
             touch(conversation);
+            offerTitle(conversation);
             emitter.send(SseEmitter.event().name("done").data(writeJson(detail(conversation)), MediaType.APPLICATION_JSON));
             emitter.complete();
         } catch (Exception exception) {
@@ -755,6 +797,17 @@ public class ConversationServiceImpl implements ConversationService {
     private void touch(Conversation conversation) {
         conversation.setUpdatedAt(LocalDateTime.now());
         conversationMapper.updateById(conversation);
+    }
+
+    /**
+     * 标题仍是占位符时才让模型起名。异步执行，不影响本轮响应；
+     * 失败就保持「新对话」，下一轮会再试一次。
+     */
+    private void offerTitle(Conversation conversation) {
+        if (!DEFAULT_TITLE.equals(conversation.getTitle())) {
+            return;
+        }
+        conversationTitleService.generate(conversation.getId());
     }
 
     private ConversationDetailVO detail(Conversation conversation) {

@@ -128,15 +128,49 @@ export async function streamConversationMessage(
   onToken: (chunk: string) => void,
   signal?: AbortSignal,
 ): Promise<ConversationDetail> {
+  return streamPost(`/api/conversations/${id}/messages/stream`, { text }, onToken, signal);
+}
+
+/** 重新生成最后一条回复：后端会丢弃它，重跑同一轮 */
+export function regenerateConversation(
+  id: number | string,
+  onToken: (chunk: string) => void,
+  signal?: AbortSignal,
+): Promise<ConversationDetail> {
+  return streamPost(`/api/conversations/${id}/regenerate`, null, onToken, signal);
+}
+
+/** 改写某条用户消息并重发：该条之后的消息会被丢弃 */
+export function editConversationMessage(
+  id: number | string,
+  messageId: number,
+  text: string,
+  onToken: (chunk: string) => void,
+  signal?: AbortSignal,
+): Promise<ConversationDetail> {
+  return streamPost(
+    `/api/conversations/${id}/messages/${messageId}/edit-stream`,
+    { text },
+    onToken,
+    signal,
+  );
+}
+
+async function streamPost(
+  path: string,
+  body: unknown,
+  onToken: (chunk: string) => void,
+  signal?: AbortSignal,
+): Promise<ConversationDetail> {
   let response: Response;
   try {
-    response = await fetch(`/api/conversations/${id}/messages/stream`, {
+    response = await fetch(path, {
       method: "POST",
       headers: {
         Accept: "text/event-stream",
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ text }),
+      body: body === null ? undefined : JSON.stringify(body),
       signal,
     });
   } catch (error) {

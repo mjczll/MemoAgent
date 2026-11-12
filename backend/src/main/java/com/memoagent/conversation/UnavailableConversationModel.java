@@ -33,4 +33,10 @@ public class UnavailableConversationModel implements ConversationModel {
     public KnowledgeResponse knowledge(String prompt) {
         throw BusinessException.badRequest("模型尚未配置");
     }
+
+    @Override
+    public String title(String prompt) {
+        // 没有模型就不起标题，调用方按「保持占位符」处理
+        return null;
+    }
 }

@@ -77,6 +77,20 @@ public class ConversationController {
         return conversationService.stream(id, request.getText().trim());
     }
 
+    /** 重新生成最后一条回复。会丢弃该回复，重跑同一轮。 */
+    @PostMapping(value = "/{id}/regenerate", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter regenerate(@PathVariable Long id) {
+        return conversationService.regenerate(id);
+    }
+
+    /** 改写某条用户消息并重发。该条之后的消息会被丢弃。 */
+    @PostMapping(value = "/{id}/messages/{messageId}/edit-stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter editStream(@PathVariable Long id,
+                                 @PathVariable Long messageId,
+                                 @Valid @RequestBody ConversationMessageRequest request) {
+        return conversationService.editStream(id, messageId, request.getText());
+    }
+
     @PostMapping("/{id}/messages/{messageId}/choice")
     public Result<ConversationDetailVO> choose(
             @PathVariable Long id,

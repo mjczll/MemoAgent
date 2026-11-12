@@ -17,6 +17,8 @@
   --faint: #5d5d60;
   --line: #1f1f22;
   --line-2: #2a2a2e;
+  /* 比 --line-2 更醒目一档，用于悬停/激活态的描边和细小指示物 */
+  --line-1: #3d3d44;
   --accent: #ededee;
   --accent-2: #ffffff;
   --accent-ink: #0c0c0d;
@@ -58,6 +60,7 @@ html[data-theme="light"] {
   --faint: #9c9ca0;
   --line: #e2e2e5;
   --line-2: #cfcfd3;
+  --line-1: #b0b0b6;
   --accent: #1a1a1c;
   --accent-2: #0c0c0d;
   --accent-ink: #ffffff;
@@ -421,6 +424,12 @@ select {
 .main-stack.wide {
   max-width: 1420px;
 }
+
+/* 对话页铺满可用宽度：否则 1420 上限居中会把滚动条顶得离右边缘很远 */
+.main--chat .main-stack.wide {
+  max-width: none;
+}
+
 .topbar {
   position: sticky;
   top: 0;
@@ -1176,6 +1185,82 @@ select {
   border-color: var(--line-2);
   background: var(--surface-2);
   color: var(--ink);
+}
+
+/* 单行短气泡：上下留白收到 2px，整体高度落在 30px，和左侧头像齐平 */
+.bubble.bubble--slim {
+  min-height: 30px;
+  padding: 2px 14px;
+}
+
+/* 消息操作条：贴在气泡下方，随气泡左/右对齐（.bubble-stack 的 align-items 决定） */
+.msg-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: -2px;
+  opacity: 0.55;
+  transition: opacity 0.15s;
+}
+
+.bubble-stack:hover .msg-actions,
+.msg-actions:focus-within {
+  opacity: 1;
+}
+
+.msg-action {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--mute);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.msg-action:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.msg-action svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* 悬浮提示：按钮下方浮出功能名，避免挡住上方的对话内容 */
+.msg-action::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  z-index: 6;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(-2px);
+  transition: opacity 0.15s, transform 0.15s;
+}
+
+.msg-action:hover::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }
 
 /*

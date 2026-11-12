@@ -30,6 +30,12 @@ public interface ConversationService {
 
     SseEmitter stream(Long id, String text);
 
+    /** 重新生成最后一条回复：丢掉它之后的消息，用同一条用户消息再跑一轮 */
+    SseEmitter regenerate(Long id);
+
+    /** 改用户消息后重发：改写该条文本，丢弃它之后的消息，重新生成回复 */
+    SseEmitter editStream(Long id, Long messageId, String text);
+
     ConversationDetailVO choose(Long id, Long messageId, ConversationChoiceRequest request);
 
     ConversationDetailVO draft(Long id);

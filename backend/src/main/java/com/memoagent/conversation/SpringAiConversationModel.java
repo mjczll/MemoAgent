@@ -75,4 +75,13 @@ public class SpringAiConversationModel implements ConversationModel {
                 .call()
                 .entity(KnowledgeResponse.class);
     }
+
+    @Override
+    public String title(String prompt) {
+        return chatClient.prompt()
+                .system(ConversationPrompts.TITLE)
+                .user(prompt)
+                .call()
+                .content();
+    }
 }

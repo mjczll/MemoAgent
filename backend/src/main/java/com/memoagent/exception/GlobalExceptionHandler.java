@@ -9,6 +9,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @Slf4j
 @RestControllerAdvice
@@ -41,6 +42,16 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<Result<Void>> handleUnreadable(HttpMessageNotReadableException exception) {
         return ResponseEntity.badRequest().body(Result.fail(400, "参数错误"));
+    }
+
+    /**
+     * 静态资源不存在（浏览器自动请求的 /favicon.ico、手敲错路径等）不是故障。
+     * 之前落到兜底分支会打成 ERROR 并返回 500，既误导排查也答错了状态码。
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<Result<Void>> handleNoResource(NoResourceFoundException exception) {
+        log.debug("静态资源不存在：{}", exception.getResourcePath());
+        return ResponseEntity.status(404).body(Result.fail(404, "资源不存在"));
     }
 
     @ExceptionHandler(Exception.class)

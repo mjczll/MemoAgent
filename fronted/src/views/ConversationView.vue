@@ -1,46 +1,77 @@
 <template>
-  <div v-if="isThread" class="fade-in interview-page thread-dock">
+  <div
+    v-if="isThread"
+    class="fade-in interview-page thread-dock"
+    :class="{ 'has-refs': refDrawer.length }"
+  >
     <div class="interview-main">
-      <div ref="scrollRef" class="chat-scroll">
-        <ChatMessage
-          v-for="message in messages"
-          :key="message.id"
-          :message="message"
-          :show-who="Boolean(message.payload?.supplement)"
-          :who-label="message.payload?.supplement ? '模型补充' : 'MemoAgent'"
-        >
-          <template #above>
-            <button
-              v-if="message.refs.length"
-              type="button"
-              class="ref-pill"
-              :aria-label="`查看 ${message.refs.length} 条引用`"
-              @click="openRefDrawer(message.refs)"
-            >
-              <SvgIcon class="ref-pill-ico" name="search" />
-              搜索到 {{ message.refs.length }} 条相关引用
-            </button>
-          </template>
-
-          <div v-if="message.payload?.supplement" class="row" style="gap: 8px">
-            <template v-if="!message.payload?.choice">
-              <button type="button" class="btn sm primary" @click="choose(message.id, 'accept')">写入知识库</button>
-              <button type="button" class="btn sm" @click="choose(message.id, 'skip')">先不写</button>
-            </template>
-            <span v-else class="small faint">{{ message.payload.choice === "accept" ? "已同意写入" : "不写入" }}</span>
-          </div>
-
-          <div v-if="message.payload?.links?.length" class="stack" style="gap: 8px">
-            <div v-for="link in message.payload?.links ?? []" :key="link.knowledgeId" class="row between wrap">
-              <span class="small">{{ link.title }}</span>
-              <span v-if="link.choice" class="small faint">{{ link.choice === "accept" ? "已关联" : "不关联" }}</span>
-              <span v-else class="row" style="gap: 8px">
-                <button type="button" class="btn sm primary" @click="choose(message.id, 'accept', link.knowledgeId)">关联到这次</button>
-                <button type="button" class="btn sm" @click="choose(message.id, 'skip', link.knowledgeId)">先不关联</button>
-              </span>
+      <!-- 滚动区与右侧刻度轨道同属一个定位容器，刻度才不会跟着内容滚动 -->
+      <div class="chat-wrap">
+        <div ref="scrollRef" class="chat-scroll" @scroll="updateScrollState">
+        <template v-for="message in messages" :key="message.id">
+          <div v-if="editingId === message.id" class="edit-box">
+            <textarea
+              v-model="editingText"
+              rows="2"
+              @keydown.esc="cancelEdit"
+              @keydown.enter.exact.prevent="submitEdit(message)"
+            />
+            <div class="edit-box-actions">
+              <button type="button" class="btn sm" @click="cancelEdit">取消</button>
+              <button
+                type="button"
+                class="btn sm primary"
+                :disabled="!editingText.trim() || store.sending"
+                @click="submitEdit(message)"
+              >
+                发送
+              </button>
             </div>
           </div>
-        </ChatMessage>
+
+          <ChatMessage
+            v-else
+            :message="message"
+            :show-who="Boolean(message.payload?.supplement)"
+            :who-label="message.payload?.supplement ? '模型补充' : 'MemoAgent'"
+            @copy="copyMessage(message)"
+            @edit="startEdit(message)"
+            @regenerate="regenerate(message)"
+          >
+            <template #above>
+              <button
+                v-if="message.refs.length"
+                type="button"
+                class="ref-pill"
+                :class="{ 'is-on': refSourceId === message.id }"
+                :aria-label="`查看 ${message.refs.length} 条引用`"
+                @click="openRefDrawer(message.id, message.refs)"
+              >
+                <SvgIcon class="ref-pill-ico" name="search" />
+                搜索到 {{ message.refs.length }} 条相关引用
+              </button>
+            </template>
+
+            <div v-if="message.payload?.supplement" class="row" style="gap: 8px">
+              <template v-if="!message.payload?.choice">
+                <button type="button" class="btn sm primary" @click="choose(message.id, 'accept')">写入知识库</button>
+                <button type="button" class="btn sm" @click="choose(message.id, 'skip')">先不写</button>
+              </template>
+              <span v-else class="small faint">{{ message.payload.choice === "accept" ? "已同意写入" : "不写入" }}</span>
+            </div>
+
+            <div v-if="message.payload?.links?.length" class="stack" style="gap: 8px">
+              <div v-for="link in message.payload?.links ?? []" :key="link.knowledgeId" class="row between wrap">
+                <span class="small">{{ link.title }}</span>
+                <span v-if="link.choice" class="small faint">{{ link.choice === "accept" ? "已关联" : "不关联" }}</span>
+                <span v-else class="row" style="gap: 8px">
+                  <button type="button" class="btn sm primary" @click="choose(message.id, 'accept', link.knowledgeId)">关联到这次</button>
+                  <button type="button" class="btn sm" @click="choose(message.id, 'skip', link.knowledgeId)">先不关联</button>
+                </span>
+              </div>
+            </div>
+          </ChatMessage>
+        </template>
 
         <div v-if="canDraft && !store.sending" class="bubble-row">
           <div class="avatar">✦</div>
@@ -56,9 +87,31 @@
           <div class="avatar">✦</div>
           <div class="bubble typing"><i /><i /><i /><span class="faint small">正在理解你刚说的内容…</span></div>
         </div>
+        </div>
+
+        <!-- 刻度导航：附着在滚动区右缘，悬停鱼眼展开 + 预览 + 点击跳转 -->
+        <MessageRail
+          v-if="!refDrawer.length"
+          :items="navItems"
+          :active-id="activeNavId"
+          @jump="jumpToMessage"
+        />
       </div>
 
       <div class="composer">
+        <button
+          v-if="showToBottom"
+          type="button"
+          class="scroll-bottom"
+          title="回到底部"
+          aria-label="回到底部"
+          @click="scrollToBottom"
+        >
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M8 3.4v8.4" />
+            <path d="M4.4 8.4 8 12l3.6-3.6" />
+          </svg>
+        </button>
         <div class="dock-composer">
           <textarea
             ref="composerRef"
@@ -81,6 +134,29 @@
         </div>
       </div>
     </div>
+
+    <!-- 引用面板：与对话并排，开着也能继续聊 -->
+    <aside v-if="refDrawer.length" class="ref-panel" aria-label="引用">
+      <header class="ref-panel-head">
+        <b>搜索结果</b>
+        <button type="button" class="ref-close" aria-label="关闭" @click="closeRefDrawer">✕</button>
+      </header>
+      <div class="ref-panel-body">
+        <button
+          v-for="item in refDrawer"
+          :key="`${item.type}-${item.id}`"
+          type="button"
+          class="ref-card"
+          @click="openRef(item)"
+        >
+          <div class="ref-card-head">
+            <span class="ref-kind">{{ refLabel(item.type) }}</span>
+            <b class="ref-title">{{ item.title }}</b>
+          </div>
+          <p v-if="refText(item)" class="ref-excerpt">{{ refText(item) }}</p>
+        </button>
+      </div>
+    </aside>
   </div>
 
   <div v-else class="fade-in">
@@ -110,32 +186,6 @@
       </div>
     </section>
   </div>
-
-  <Teleport to="body">
-    <div v-if="refDrawer.length" class="ref-mask" @click.self="closeRefDrawer">
-      <aside class="ref-drawer" role="dialog" aria-label="引用">
-        <header class="ref-drawer-head">
-          <b>搜索结果</b>
-          <button type="button" class="ref-close" aria-label="关闭" @click="closeRefDrawer">✕</button>
-        </header>
-        <div class="ref-drawer-body">
-          <button
-            v-for="item in refDrawer"
-            :key="`${item.type}-${item.id}`"
-            type="button"
-            class="ref-card"
-            @click="openRef(item)"
-          >
-            <div class="ref-card-head">
-              <span class="ref-kind">{{ refLabel(item.type) }}</span>
-              <b class="ref-title">{{ item.title }}</b>
-            </div>
-            <p v-if="refText(item)" class="ref-excerpt">{{ refText(item) }}</p>
-          </button>
-        </div>
-      </aside>
-    </div>
-  </Teleport>
 </template>
 
 <script setup lang="ts">
@@ -145,6 +195,7 @@ import { errorMessage } from "@/api/http";
 import { isAbortError } from "@/api/conversation";
 import type { ConversationRef } from "@/api/conversation";
 import ChatMessage from "@/components/chat/ChatMessage.vue";
+import MessageRail from "@/components/chat/MessageRail.vue";
 import SvgIcon from "@/components/base/SvgIcon.vue";
 import { useConversationStore } from "@/stores/conversation";
 import { useLibraryStore } from "@/stores/library";
@@ -159,6 +210,57 @@ const input = ref("");
 const composerRef = ref<HTMLTextAreaElement | null>(null);
 const drafting = ref(false);
 const scrollRef = ref<HTMLElement | null>(null);
+
+/** 往上翻了就浮出「回到底部」按钮，回到底部自动收起 */
+const showToBottom = ref(false);
+
+/** 问题定位：把用户的每句提问排成右侧一列，点一下就跳过去 */
+const navItems = computed(() =>
+  (store.current?.messages ?? [])
+    .filter((message) => message.role === "user" && message.text?.trim())
+    .map((message) => ({ id: message.id, text: message.text.trim() })),
+);
+const activeNavId = ref<number | null>(null);
+
+function updateScrollState() {
+  const el = scrollRef.value;
+  if (!el) return;
+  showToBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight > 120;
+  updateActiveNav();
+}
+
+/** 当前读到哪一条：最后一个顶部已经划到栏顶附近（含）的提问 */
+function updateActiveNav() {
+  const el = scrollRef.value;
+  if (!el || !navItems.value.length) {
+    activeNavId.value = null;
+    return;
+  }
+  const top = el.getBoundingClientRect().top;
+  let active = navItems.value[0].id;
+  for (const item of navItems.value) {
+    const node = el.querySelector<HTMLElement>(`[data-msg-id="${item.id}"]`);
+    if (node && node.getBoundingClientRect().top - top <= 72) {
+      active = item.id;
+    }
+  }
+  activeNavId.value = active;
+}
+
+function jumpToMessage(id: number) {
+  const el = scrollRef.value;
+  const node = el?.querySelector<HTMLElement>(`[data-msg-id="${id}"]`);
+  if (!el || !node) return;
+  const delta = node.getBoundingClientRect().top - el.getBoundingClientRect().top;
+  el.scrollTo({ top: el.scrollTop + delta - 16, behavior: "smooth" });
+}
+
+function scrollToBottom() {
+  const el = scrollRef.value;
+  if (!el) return;
+  el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  showToBottom.value = false;
+}
 
 const isThread = computed(() => route.name === "conversation");
 
@@ -224,16 +326,24 @@ function refText(item: ConversationRef): string {
   return value ?? "";
 }
 
-/** 引用抽屉：消息里只留一个「搜索到 N 条」的胶囊，点开才看清单，避免正文被压住 */
+/** 引用面板：与对话并排展示，消息里只留一个「搜索到 N 条」的胶囊 */
 const refDrawer = ref<ConversationRef[]>([]);
+const refSourceId = ref<number | null>(null);
 
-function openRefDrawer(items: ConversationRef[]) {
+function openRefDrawer(messageId: number, items: ConversationRef[]) {
+  // 再点同一条 = 收起
+  if (refSourceId.value === messageId) {
+    closeRefDrawer();
+    return;
+  }
+  refSourceId.value = messageId;
   // 复制一份，补全时不会改到原始消息的 payload
   refDrawer.value = items.map((item) => ({ ...item }));
   void fillMissingRefs();
 }
 
 function closeRefDrawer() {
+  refSourceId.value = null;
   refDrawer.value = [];
 }
 
@@ -272,6 +382,60 @@ function openRef(item: ConversationRef) {
   if (item.type === "diary") router.push(`/diaries/${item.id}`);
   else if (item.type === "experience") router.push(`/experiences/${item.id}`);
   else router.push(`/knowledge/${item.id}`);
+}
+
+/* ---------- 消息操作：复制 / 重新生成 / 编辑重发 ---------- */
+
+const editingId = ref<number | null>(null);
+const editingText = ref("");
+
+async function copyMessage(message: { text: string }) {
+  const text = (message.text ?? "").trim();
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    ui.toast("已复制");
+  } catch {
+    ui.toast("复制失败，请手动选中文本", "error");
+  }
+}
+
+async function regenerate(message: { id: number }) {
+  const id = store.current?.id;
+  if (!id || store.sending) return;
+  try {
+    await store.regenerate(id, message.id);
+  } catch (error) {
+    ui.toast(errorMessage(error, "重新生成失败"), "error");
+  }
+}
+
+function startEdit(message: { id: number; text: string }) {
+  editingId.value = message.id;
+  editingText.value = message.text;
+  void nextTick(() => {
+    const box = document.querySelector<HTMLTextAreaElement>(".edit-box textarea");
+    box?.focus();
+    box?.select();
+  });
+}
+
+function cancelEdit() {
+  editingId.value = null;
+  editingText.value = "";
+}
+
+async function submitEdit(message: { id: number }) {
+  const id = store.current?.id;
+  const text = editingText.value.trim();
+  if (!id || !text || store.sending) return;
+  editingId.value = null;
+  editingText.value = "";
+  try {
+    await store.editAndResend(id, message.id, text);
+  } catch (error) {
+    ui.toast(errorMessage(error, "重新发送失败"), "error");
+  }
 }
 
 async function submitHome() {
@@ -339,12 +503,23 @@ watch(
   },
 );
 
+// 切换会话时复位：否则上一条对话里滚上去的状态会让新对话停在顶部
+watch(
+  () => store.current?.id,
+  () => {
+    showToBottom.value = false;
+  },
+);
+
 watch(
   () => (store.current?.messages ?? []).map((item) => item.text).join("\n").length,
   async () => {
     await nextTick();
     const el = scrollRef.value;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (!el) return;
+    // 用户正往上翻看历史时不要抢滚动位置，交给「回到底部」按钮
+    if (!showToBottom.value) el.scrollTop = el.scrollHeight;
+    updateScrollState();
   },
 );
 
@@ -377,10 +552,12 @@ onBeforeUnmount(() => window.removeEventListener("resize", resizeComposer));
   box-sizing: border-box;
   height: calc(100vh - var(--topbar-h));
   margin: calc(var(--main-pad-y) * -1) calc(var(--main-pad-x) * -1) -56px;
-  padding: 0 var(--main-pad-x) 12px;
+  /* 右侧不留内边距：滚动条贴着窗口右边线；消息列自己居中，不受影响 */
+  padding: 0 0 12px var(--main-pad-x);
 }
 
 .thread-dock .interview-main {
+  position: relative;
   flex: 1;
   min-height: 0;
   display: flex;
@@ -393,13 +570,123 @@ onBeforeUnmount(() => window.removeEventListener("resize", resizeComposer));
   overflow-y: auto;
   /* 与顶栏留出呼吸空间：首个气泡不贴着分隔线 */
   padding-top: 20px;
+  /* 默认 thin 约 8px。全局 * 设了 scrollbar-color，会让 ::-webkit-* 失效，
+     这里两个都重置成 auto，让下面的伪元素规则接管宽度 */
+  scrollbar-width: auto;
+  scrollbar-color: auto;
+}
+
+.thread-dock .chat-scroll::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.thread-dock .chat-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.thread-dock .chat-scroll::-webkit-scrollbar-thumb {
+  border-radius: 2px;
+  background: var(--line-2);
+}
+
+.thread-dock .chat-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--mute);
+}
+
+/* 消息列与输入框同宽并居中：长回复不再横跨整屏，读起来更聚焦 */
+.thread-dock .chat-scroll > * {
+  width: 100%;
+  max-width: 720px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* 编辑用户消息：原地展开成输入框，取消 / 发送靠右下 */
+.edit-box {
+  padding: 10px 12px 8px;
+  border: 1px solid var(--line-1);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.edit-box textarea {
+  width: 100%;
+  min-height: 44px;
+  max-height: 240px;
+  padding: 0;
+  border: 0;
+  outline: none;
+  resize: vertical;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.edit-box-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
 }
 
 .thread-dock .composer {
-  position: static;
+  /* 相对定位只为「回到底部」按钮做锚点，按钮浮在输入框上方 */
+  position: relative;
   flex: none;
   padding-top: 8px;
   background: linear-gradient(180deg, transparent, var(--paper) 36%);
+}
+
+/* 回到底部：贴在输入框上沿，右边缘与消息列对齐 */
+.scroll-bottom {
+  position: absolute;
+  right: max(0px, calc((100% - 720px) / 2));
+  bottom: calc(100% + 8px);
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--line-2);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--ink-2);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+/* 悬停用实色：--hover 是半透明叠加，会把按钮底透出来，看起来像变透明了 */
+.scroll-bottom:hover {
+  background: var(--surface-2);
+  border-color: var(--line-1);
+  color: var(--ink);
+}
+
+.scroll-bottom:active {
+  background: var(--surface-2);
+}
+
+.scroll-bottom svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* 滚动区 + 刻度轨道：轨道绝对定位在这个容器里，不随内容滚动 */
+.thread-dock .chat-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
 }
 
 .dock-composer {
@@ -475,6 +762,23 @@ onBeforeUnmount(() => window.removeEventListener("resize", resizeComposer));
     padding-left: 16px;
     padding-right: 16px;
   }
+
+  /* 窄屏放不下并排：引用面板改为右侧浮层，对话不被压扁 */
+  .thread-dock.has-refs {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .ref-panel {
+    position: fixed;
+    inset: 0 0 0 auto;
+    z-index: 120;
+    width: min(340px, 92vw);
+    border: 0;
+    border-left: 1px solid var(--line-2);
+    border-radius: 0;
+    box-shadow: -12px 0 32px rgba(0, 0, 0, 0.18);
+  }
 }
 
 /* 引用胶囊：消息里只占一行，清单进抽屉 */
@@ -500,35 +804,52 @@ onBeforeUnmount(() => window.removeEventListener("resize", resizeComposer));
   border-color: var(--line-1);
 }
 
+/* 当前正在查看的那条消息，胶囊高亮 */
+.ref-pill.is-on {
+  border-color: var(--line-1);
+  background: var(--hover);
+  color: var(--ink);
+}
+
 .ref-pill-ico {
   width: 11px;
   height: 11px;
   opacity: 0.7;
 }
 
-.ref-mask {
-  position: fixed;
-  inset: 0;
-  z-index: 120;
-  display: flex;
-  justify-content: flex-end;
-  background: rgba(0, 0, 0, 0.34);
+/* 引用面板打开时：对话列收窄到左侧，面板占右侧一列，两者同时可用 */
+.thread-dock.has-refs {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  grid-template-rows: minmax(0, 1fr);
+  column-gap: 16px;
+  /* 面板贴住右侧边界，不再留 24px 的正文内边距 */
+  padding-right: 0;
 }
 
-.ref-drawer {
+.thread-dock.has-refs > * {
+  min-width: 0;
+  min-height: 0;
+}
+
+/* 面板打开后对话列会变宽，气泡按阅读宽度收窄，避免一行太长 */
+.thread-dock.has-refs :deep(.bubble) {
+  max-width: min(760px, 82%);
+}
+
+.ref-panel {
   display: flex;
   flex-direction: column;
-  width: min(420px, 92vw);
-  height: 100%;
-  border-left: 1px solid var(--line-2);
+  min-height: 0;
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
   background: var(--paper);
-  box-shadow: -12px 0 32px rgba(0, 0, 0, 0.18);
   animation: ref-slide 0.18s ease-out;
 }
 
 @keyframes ref-slide {
   from {
-    transform: translateX(24px);
+    transform: translateX(16px);
     opacity: 0.6;
   }
   to {
@@ -537,12 +858,13 @@ onBeforeUnmount(() => window.removeEventListener("resize", resizeComposer));
   }
 }
 
-.ref-drawer-head {
+.ref-panel-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 18px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--line-2);
+  font-size: 13px;
 }
 
 .ref-close {
@@ -557,7 +879,7 @@ onBeforeUnmount(() => window.removeEventListener("resize", resizeComposer));
   color: var(--ink);
 }
 
-.ref-drawer-body {
+.ref-panel-body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;

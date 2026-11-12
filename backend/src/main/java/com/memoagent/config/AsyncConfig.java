@@ -50,4 +50,21 @@ public class AsyncConfig {
         executor.initialize();
         return executor;
     }
+
+    /**
+     * 会话标题生成。单独一个池，避免被「提取经验候选」那种十几秒的任务挡住——
+     * 标题生成晚一两秒可接受，但排在长任务后面就变成几十秒了。
+     * 丢任务比慢更糟，所以队列满时同样退回调用线程。
+     */
+    @Bean("titleExecutor")
+    public Executor titleExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(1);
+        executor.setQueueCapacity(50);
+        executor.setThreadNamePrefix("conv-title-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.initialize();
+        return executor;
+    }
 }
