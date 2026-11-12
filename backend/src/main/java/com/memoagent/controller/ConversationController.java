@@ -15,9 +15,11 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -49,6 +51,20 @@ public class ConversationController {
     public Result<Void> delete(@PathVariable Long id) {
         conversationService.delete(id);
         return Result.ok(null);
+    }
+
+    /** 重命名。只改标题，不刷新更新时间。 */
+    @PutMapping("/{id}")
+    public Result<ConversationListItemVO> rename(@PathVariable Long id,
+                                                 @RequestParam String title) {
+        return Result.ok(conversationService.rename(id, title));
+    }
+
+    /** 置顶 / 取消置顶。 */
+    @PutMapping("/{id}/pinned")
+    public Result<ConversationListItemVO> pin(@PathVariable Long id,
+                                              @RequestParam boolean pinned) {
+        return Result.ok(conversationService.pin(id, pinned));
     }
 
     @PostMapping("/{id}/messages")

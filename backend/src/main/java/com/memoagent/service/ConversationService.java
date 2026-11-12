@@ -21,6 +21,11 @@ public interface ConversationService {
 
     void delete(Long id);
 
+    /** 重命名对话标题，只改标题不动更新时间，避免它因为改名跳到列表顶部 */
+    ConversationListItemVO rename(Long id, String title);
+
+    ConversationListItemVO pin(Long id, boolean pinned);
+
     ConversationDetailVO send(Long id, ConversationMessageRequest request);
 
     SseEmitter stream(Long id, String text);

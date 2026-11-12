@@ -8,6 +8,8 @@ import {
   getConversation,
   listConversations,
   isAbortError,
+  pinConversation,
+  renameConversation,
   streamConversationMessage,
   type CommitResult,
   type ConversationDetail,
@@ -182,6 +184,17 @@ export const useConversationStore = defineStore("conversation", {
     async remove(id: number) {
       await deleteConversation(id);
       if (this.current?.id === id) this.current = null;
+      await this.refresh();
+    },
+
+    async rename(id: number, title: string) {
+      await renameConversation(id, title);
+      await this.refresh();
+      if (this.current?.id === id) this.current.title = title;
+    },
+
+    async togglePin(id: number, pinned: boolean) {
+      await pinConversation(id, pinned);
       await this.refresh();
     },
   },

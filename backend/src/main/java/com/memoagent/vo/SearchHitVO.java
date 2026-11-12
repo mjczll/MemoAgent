@@ -13,8 +13,11 @@ public class SearchHitVO {
 
     private String title;
 
-    /** 回查 MySQL 得到的简短摘要，用于展示和作为引用来源。 */
+    /** 回查 MySQL 得到的正文摘要，用于模型理解与引用展示。 */
     private String excerpt;
+
+    /** 一句话概括。经验取结论，日记/知识取摘要，引用卡片优先用它。 */
+    private String summary;
 
     /** 余弦相似度，越大越相近。 */
     private double score;

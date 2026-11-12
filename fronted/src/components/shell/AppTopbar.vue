@@ -2,6 +2,29 @@
   <header class="topbar">
     <button class="icon-btn menu-btn" title="菜单" @click="emit('toggle-rail')">☰</button>
 
+    <!-- 对话页：标题放在顶栏内，点击即可重命名 -->
+    <template v-if="showTitle && title">
+      <input
+        v-if="editingTop"
+        ref="topInput"
+        v-model="topDraft"
+        class="topbar-title-input"
+        maxlength="200"
+        @keydown.enter.prevent="commitTop"
+        @keydown.esc.prevent="cancelTop"
+        @blur="commitTop"
+      />
+      <button
+        v-else
+        type="button"
+        class="topbar-title"
+        :title="`${title}（点击重命名）`"
+        @click="startTopEdit"
+      >
+        {{ title }}
+      </button>
+    </template>
+
     <div class="topbar-spacer">
       <!-- Interview / Agent 路由下显示可点击重命名的聊天标题栏 -->
       <div v-if="titleEditable" class="chat-title-bar">
@@ -30,11 +53,15 @@ import { computed, nextTick, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useInterviewStore } from "@/stores/interview";
 import { useAgentStore } from "@/stores/agent";
+import { useConversationStore } from "@/stores/conversation";
 import { useUiStore } from "@/stores/ui";
+import { errorMessage } from "@/api/http";
 
 const props = defineProps<{
   title?: string;
   titleEditable?: boolean;
+  /** 是否在顶栏左侧显示页面标题（对话页用） */
+  showTitle?: boolean;
 }>();
 
 const emit = defineEmits<{ (e: "toggle-rail"): void }>();
@@ -44,11 +71,57 @@ const router = useRouter();
 const ui = useUiStore();
 const interview = useInterviewStore();
 const agent = useAgentStore();
+const conversations = useConversationStore();
 const keyword = ref("");
 
 const editing = ref(false);
 const draft = ref("");
 const titleInput = ref<HTMLInputElement | null>(null);
+
+/* ---------- 对话标题：顶栏内直接重命名 ---------- */
+const editingTop = ref(false);
+const topDraft = ref("");
+const topInput = ref<HTMLInputElement | null>(null);
+let skipTopBlur = false;
+
+function startTopEdit() {
+  const current = conversations.current;
+  if (!current) return;
+  topDraft.value = current.title ?? "";
+  editingTop.value = true;
+  nextTick(() => {
+    topInput.value?.focus();
+    topInput.value?.select();
+  });
+}
+
+function cancelTop() {
+  skipTopBlur = true;
+  editingTop.value = false;
+  topDraft.value = "";
+  nextTick(() => {
+    skipTopBlur = false;
+  });
+}
+
+async function commitTop() {
+  if (skipTopBlur) return;
+  if (!editingTop.value) return;
+  const current = conversations.current;
+  const text = topDraft.value.trim();
+  editingTop.value = false;
+  if (!current || !text || current.title === text) return;
+  // 拖拽误把链接地址写进输入框时拦掉
+  if (/^https?:\/\//i.test(text)) {
+    ui.toast("标题不能是链接地址", "warn");
+    return;
+  }
+  try {
+    await conversations.rename(current.id, text);
+  } catch (error) {
+    ui.toast(errorMessage(error, "重命名失败"), "error");
+  }
+}
 
 const liveTitle = computed(() => {
   if (!props.titleEditable) return props.title ?? "";
@@ -99,6 +172,7 @@ watch(
   () => route.fullPath,
   () => {
     editing.value = false;
+    editingTop.value = false;
   },
 );
 </script>

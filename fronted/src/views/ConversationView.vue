@@ -1,14 +1,5 @@
 <template>
   <div v-if="isThread" class="fade-in interview-page thread-dock">
-    <div class="interview-head">
-      <div class="grow">
-        <h1 class="h1">{{ store.current?.title || "对话" }}</h1>
-        <p class="lede" style="margin-bottom: 0">
-          讲一件事，或问问过去的记录。没听懂的地方可以让助手补充，只有你点过同意才会写入。
-        </p>
-      </div>
-    </div>
-
     <div class="interview-main">
       <div ref="scrollRef" class="chat-scroll">
         <ChatMessage
@@ -18,18 +9,18 @@
           :show-who="Boolean(message.payload?.supplement)"
           :who-label="message.payload?.supplement ? '模型补充' : 'MemoAgent'"
         >
-          <div v-if="message.refs.length" class="stack" style="gap: 6px">
+          <template #above>
             <button
-              v-for="ref in message.refs"
-              :key="`${ref.type}-${ref.id}`"
+              v-if="message.refs.length"
               type="button"
-              class="btn ghost sm"
-              style="justify-content: flex-start"
-              @click="openRef(ref)"
+              class="ref-pill"
+              :aria-label="`查看 ${message.refs.length} 条引用`"
+              @click="openRefDrawer(message.refs)"
             >
-              {{ refLabel(ref.type) }} · {{ ref.title }}
+              <SvgIcon class="ref-pill-ico" name="search" />
+              搜索到 {{ message.refs.length }} 条相关引用
             </button>
-          </div>
+          </template>
 
           <div v-if="message.payload?.supplement" class="row" style="gap: 8px">
             <template v-if="!message.payload?.choice">
@@ -119,6 +110,32 @@
       </div>
     </section>
   </div>
+
+  <Teleport to="body">
+    <div v-if="refDrawer.length" class="ref-mask" @click.self="closeRefDrawer">
+      <aside class="ref-drawer" role="dialog" aria-label="引用">
+        <header class="ref-drawer-head">
+          <b>搜索结果</b>
+          <button type="button" class="ref-close" aria-label="关闭" @click="closeRefDrawer">✕</button>
+        </header>
+        <div class="ref-drawer-body">
+          <button
+            v-for="item in refDrawer"
+            :key="`${item.type}-${item.id}`"
+            type="button"
+            class="ref-card"
+            @click="openRef(item)"
+          >
+            <div class="ref-card-head">
+              <span class="ref-kind">{{ refLabel(item.type) }}</span>
+              <b class="ref-title">{{ item.title }}</b>
+            </div>
+            <p v-if="refText(item)" class="ref-excerpt">{{ refText(item) }}</p>
+          </button>
+        </div>
+      </aside>
+    </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
@@ -128,12 +145,15 @@ import { errorMessage } from "@/api/http";
 import { isAbortError } from "@/api/conversation";
 import type { ConversationRef } from "@/api/conversation";
 import ChatMessage from "@/components/chat/ChatMessage.vue";
+import SvgIcon from "@/components/base/SvgIcon.vue";
 import { useConversationStore } from "@/stores/conversation";
+import { useLibraryStore } from "@/stores/library";
 import { useUiStore } from "@/stores/ui";
 
 const route = useRoute();
 const router = useRouter();
 const store = useConversationStore();
+const library = useLibraryStore();
 const ui = useUiStore();
 const input = ref("");
 const composerRef = ref<HTMLTextAreaElement | null>(null);
@@ -198,10 +218,60 @@ function refLabel(type: ConversationRef["type"]) {
   return "知识";
 }
 
-function openRef(ref: ConversationRef) {
-  if (ref.type === "diary") router.push(`/diaries/${ref.id}`);
-  else if (ref.type === "experience") router.push(`/experiences/${ref.id}`);
-  else router.push(`/knowledge/${ref.id}`);
+/** 经验展示一句话结论，日记和知识展示正文摘要 */
+function refText(item: ConversationRef): string {
+  const value = item.type === "experience" ? item.summary || item.excerpt : item.excerpt || item.summary;
+  return value ?? "";
+}
+
+/** 引用抽屉：消息里只留一个「搜索到 N 条」的胶囊，点开才看清单，避免正文被压住 */
+const refDrawer = ref<ConversationRef[]>([]);
+
+function openRefDrawer(items: ConversationRef[]) {
+  // 复制一份，补全时不会改到原始消息的 payload
+  refDrawer.value = items.map((item) => ({ ...item }));
+  void fillMissingRefs();
+}
+
+function closeRefDrawer() {
+  refDrawer.value = [];
+}
+
+/**
+ * 历史消息的 refs 只存了 type/id/title（那时的 payload 没有摘要字段），
+ * 直接展示会空着。这里按 id 回查一次详情补上正文，旧消息也能看到内容。
+ */
+async function fillMissingRefs() {
+  const pending = refDrawer.value.filter((item) => !item.excerpt && !item.summary);
+  if (!pending.length) return;
+  await Promise.all(
+    pending.map(async (item) => {
+      try {
+        if (item.type === "diary") {
+          const diary = await library.fetchDiary(String(item.id));
+          item.excerpt = diary?.content ?? "";
+          item.summary = diary?.summary ?? "";
+        } else if (item.type === "experience") {
+          const experience = await library.fetchExperience(String(item.id));
+          item.excerpt = experience?.problem ?? "";
+          item.summary = experience?.lesson ?? "";
+        } else {
+          const knowledge = await library.fetchKnowledgeItem(String(item.id));
+          item.excerpt = knowledge?.content ?? "";
+          item.summary = knowledge?.summary ?? "";
+        }
+      } catch {
+        // 取不到就保持空，卡片只显示标题，不打断抽屉
+      }
+    }),
+  );
+}
+
+function openRef(item: ConversationRef) {
+  closeRefDrawer();
+  if (item.type === "diary") router.push(`/diaries/${item.id}`);
+  else if (item.type === "experience") router.push(`/experiences/${item.id}`);
+  else router.push(`/knowledge/${item.id}`);
 }
 
 async function submitHome() {
@@ -300,13 +370,14 @@ onBeforeUnmount(() => window.removeEventListener("resize", resizeComposer));
 </script>
 
 <style scoped>
+/* 标题已上移到顶栏（AppTopbar），内容区从顶栏下沿直接开始 */
 .thread-dock {
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
   height: calc(100vh - var(--topbar-h));
   margin: calc(var(--main-pad-y) * -1) calc(var(--main-pad-x) * -1) -56px;
-  padding: var(--main-pad-y) var(--main-pad-x) 16px;
+  padding: 0 var(--main-pad-x) 12px;
 }
 
 .thread-dock .interview-main {
@@ -320,6 +391,8 @@ onBeforeUnmount(() => window.removeEventListener("resize", resizeComposer));
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* 与顶栏留出呼吸空间：首个气泡不贴着分隔线 */
+  padding-top: 20px;
 }
 
 .thread-dock .composer {
@@ -402,5 +475,153 @@ onBeforeUnmount(() => window.removeEventListener("resize", resizeComposer));
     padding-left: 16px;
     padding-right: 16px;
   }
+}
+
+/* 引用胶囊：消息里只占一行，清单进抽屉 */
+.ref-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  margin-bottom: 2px;
+  padding: 2px 8px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--mute);
+  font-size: 11px;
+  line-height: 1.6;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.ref-pill:hover {
+  color: var(--ink);
+  border-color: var(--line-1);
+}
+
+.ref-pill-ico {
+  width: 11px;
+  height: 11px;
+  opacity: 0.7;
+}
+
+.ref-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(0, 0, 0, 0.34);
+}
+
+.ref-drawer {
+  display: flex;
+  flex-direction: column;
+  width: min(420px, 92vw);
+  height: 100%;
+  border-left: 1px solid var(--line-2);
+  background: var(--paper);
+  box-shadow: -12px 0 32px rgba(0, 0, 0, 0.18);
+  animation: ref-slide 0.18s ease-out;
+}
+
+@keyframes ref-slide {
+  from {
+    transform: translateX(24px);
+    opacity: 0.6;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.ref-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line-2);
+}
+
+.ref-close {
+  border: 0;
+  background: transparent;
+  color: var(--mute);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.ref-close:hover {
+  color: var(--ink);
+}
+
+.ref-drawer-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+/* 列表式：行与行用细分割线，不再用浮动卡片，避免每条都像一块独立面板 */
+.ref-card {
+  display: block;
+  width: 100%;
+  padding: 12px 18px;
+  border: 0;
+  border-bottom: 1px solid var(--line-2);
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.ref-card:last-child {
+  border-bottom: 0;
+}
+
+.ref-card:hover {
+  background: var(--hover);
+}
+
+/* 徽章在上、标题在下，左边缘对齐 */
+.ref-card-head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.ref-kind {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--hover);
+  color: var(--mute);
+  font-size: 10px;
+  line-height: 1.7;
+}
+
+.ref-title {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ref-excerpt {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin: 5px 0 0;
+  color: var(--mute);
+  font-size: 11px;
+  line-height: 1.65;
 }
 </style>

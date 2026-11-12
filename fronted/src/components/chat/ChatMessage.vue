@@ -7,6 +7,8 @@
     <div v-if="message.role !== 'user'" class="avatar">{{ avatar }}</div>
     <div class="stack bubble-stack">
       <div v-if="showWho" class="who small">{{ whoLabel }}</div>
+      <!-- 气泡上方的附属信息，例如引用条数胶囊 -->
+      <slot name="above" />
       <div class="bubble">
         <MarkdownView v-if="markdown && message.role !== 'user'" :text="message.text" />
         <template v-else>{{ message.text }}</template>

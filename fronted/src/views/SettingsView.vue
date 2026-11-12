@@ -90,11 +90,11 @@
           <div class="panel-head"><b>关于这个原型</b></div>
           <div class="panel-body small" style="color: var(--mute)">
             <p style="margin: 0 0 8px">
-              MemoAgent · AI 采访式个人经验与知识管理系统（前端高保真原型）。
+              MemoAgent · AI 采访式个人经验与知识管理系统。
             </p>
             <p style="margin: 0">
               技术栈：Vue 3 + TypeScript + Vite + Pinia + vue-router；图谱由内联 SVG 绘制；
-              日记 / 经验 / 知识已对接后端；采访、关系图谱、Agent 仍为本地计算或 Mock。
+              日记 / 经验 / 知识 / 采访对话 / 语义检索均已对接后端。
             </p>
           </div>
         </div>

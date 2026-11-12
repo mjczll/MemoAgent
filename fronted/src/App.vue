@@ -9,8 +9,13 @@
     />
     <div v-if="railOpen && !railCollapsed" class="scrim" @click="closeRail" />
 
-    <main class="main">
-      <AppTopbar @toggle-rail="toggleMobile" :title="titleLabel" :title-editable="titleEditable" />
+    <main class="main" :class="{ 'main--chat': showTopbarTitle }">
+      <AppTopbar
+        @toggle-rail="toggleMobile"
+        :title="titleLabel"
+        :title-editable="titleEditable"
+        :show-title="showTopbarTitle"
+      />
       <div class="main-inner">
         <div class="main-stack" :class="innerClass">
           <router-view v-slot="{ Component }">
@@ -32,9 +37,11 @@ import AppTopbar from "@/components/shell/AppTopbar.vue";
 import SnowFall from "@/components/base/SnowFall.vue";
 import ToastHost from "@/components/base/ToastHost.vue";
 import { useLibraryStore } from "@/stores/library";
+import { useConversationStore } from "@/stores/conversation";
 import { useUiStore } from "@/stores/ui";
 
 const route = useRoute();
+const conversations = useConversationStore();
 const railOpen = ref(false);
 const railCollapsed = ref(false);
 
@@ -47,7 +54,14 @@ const innerClass = computed(() => {
   return "";
 });
 
-const titleLabel = computed(() => (route.meta.crumb as string | undefined) ?? "首页");
+const titleLabel = computed(() => {
+  // 对话页用会话标题（标题就在顶栏里，位于分隔线上方）
+  if (route.name === "conversation") {
+    return conversations.current?.title || "对话";
+  }
+  return (route.meta.crumb as string | undefined) ?? "首页";
+});
+const showTopbarTitle = computed(() => route.name === "conversation");
 const titleEditable = computed(() => false);
 
 function toggleMobile() {

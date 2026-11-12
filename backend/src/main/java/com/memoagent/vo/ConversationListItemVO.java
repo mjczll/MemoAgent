@@ -13,5 +13,8 @@ public class ConversationListItemVO {
 
     private String status;
 
+    /** 是否置顶 */
+    private Boolean pinned;
+
     private LocalDateTime updatedAt;
 }

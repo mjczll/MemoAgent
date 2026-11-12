@@ -50,6 +50,9 @@ public class SemanticSearchService {
     /** 回填摘要的长度，避免把整篇正文塞进搜索结果 / 采访提示词。 */
     private static final int EXCERPT_MAX = 80;
 
+    /** 一句话概括的长度。经验取结论，日记和知识取摘要。 */
+    private static final int SUMMARY_MAX = 60;
+
     /** 相似提醒默认给几条。主动推送讲究少而准，5 条足够。 */
     public static final int DEFAULT_SIMILAR_TOP_K = 5;
 
@@ -169,27 +172,33 @@ public class SemanticSearchService {
         String type = match.sourceType();
         String title;
         String excerpt;
+        String summary;
         if (VectorSourceTypes.DIARY.equals(type)) {
             Diary diary = diaryMapper.selectById(match.sourceId());
             if (diary == null) {
                 return null;
             }
             title = diary.getTitle();
-            excerpt = StringUtils.hasText(diary.getSummary()) ? diary.getSummary() : diary.getContent();
+            // 正文要进来：只有摘要那几十字时，模型和引用卡片都讲不出具体做法
+            excerpt = joinText(diary.getSummary(), diary.getContent());
+            summary = firstText(diary.getSummary(), diary.getContent());
         } else if (VectorSourceTypes.EXPERIENCE.equals(type)) {
             Experience experience = experienceMapper.selectById(match.sourceId());
             if (experience == null) {
                 return null;
             }
             title = experience.getTitle();
-            excerpt = StringUtils.hasText(experience.getProblem()) ? experience.getProblem() : experience.getLesson();
+            excerpt = joinText(experience.getProblem(), experience.getSolution(), experience.getLesson());
+            // 经验的一句话用结论（lesson），问题描述只是背景
+            summary = firstText(experience.getLesson(), experience.getProblem());
         } else if (VectorSourceTypes.KNOWLEDGE.equals(type)) {
             Knowledge knowledge = knowledgeMapper.selectById(match.sourceId());
             if (knowledge == null) {
                 return null;
             }
             title = knowledge.getTitle();
-            excerpt = StringUtils.hasText(knowledge.getSummary()) ? knowledge.getSummary() : knowledge.getContent();
+            excerpt = joinText(knowledge.getSummary(), knowledge.getContent());
+            summary = firstText(knowledge.getSummary(), knowledge.getContent());
         } else {
             return null;
         }
@@ -198,7 +207,29 @@ public class SemanticSearchService {
         hit.setId(match.sourceId());
         hit.setTitle(title);
         hit.setExcerpt(Texts.truncate(excerpt, excerptMax));
+        hit.setSummary(Texts.truncate(summary, SUMMARY_MAX));
         hit.setScore(match.score());
         return hit;
+    }
+
+    private static String joinText(String... parts) {
+        StringBuilder text = new StringBuilder();
+        for (String part : parts) {
+            if (!StringUtils.hasText(part)) {
+                continue;
+            }
+            if (text.length() > 0) {
+                text.append('\n');
+            }
+            text.append(part.strip());
+        }
+        return text.toString();
+    }
+
+    private static String firstText(String primary, String fallback) {
+        if (StringUtils.hasText(primary)) {
+            return primary;
+        }
+        return StringUtils.hasText(fallback) ? fallback : "";
     }
 }

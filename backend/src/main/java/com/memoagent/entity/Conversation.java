@@ -23,6 +23,9 @@ public class Conversation {
 
     private String status;
 
+    /** 置顶后固定在列表最前面，不随更新时间下沉 */
+    private Boolean pinned;
+
     private String draftJson;
 
     private String resultJson;

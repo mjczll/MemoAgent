@@ -4,6 +4,10 @@ export interface ConversationRef {
   type: "diary" | "experience" | "knowledge";
   id: number;
   title: string;
+  /** 正文摘要，日记和知识显示它；历史消息可能没有 */
+  excerpt?: string | null;
+  /** 一句话概括，经验显示它 */
+  summary?: string | null;
 }
 
 export interface ConversationLink {
@@ -74,6 +78,8 @@ export interface ConversationListItem {
   id: number;
   title: string;
   status: "active" | "drafted" | "committed";
+  /** 置顶后固定排在列表最前面 */
+  pinned: boolean;
   updatedAt: string;
 }
 
@@ -100,6 +106,16 @@ export function getConversation(id: number | string): Promise<ConversationDetail
 
 export function deleteConversation(id: number | string): Promise<void> {
   return request<null>(`/api/conversations/${id}`, { method: "DELETE" }).then(() => undefined);
+}
+
+/** 只改标题，不刷新更新时间，避免改名后跳到列表顶部 */
+export function renameConversation(id: number | string, title: string): Promise<ConversationListItem> {
+  const params = new URLSearchParams({ title });
+  return request<ConversationListItem>(`/api/conversations/${id}?${params.toString()}`, { method: "PUT" });
+}
+
+export function pinConversation(id: number | string, pinned: boolean): Promise<ConversationListItem> {
+  return request<ConversationListItem>(`/api/conversations/${id}/pinned?pinned=${pinned}`, { method: "PUT" });
 }
 
 export function isAbortError(error: unknown): boolean {

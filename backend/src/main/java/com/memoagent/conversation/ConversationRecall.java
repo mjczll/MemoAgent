@@ -67,7 +67,8 @@ public class ConversationRecall {
                 if (hit.getId() == null) {
                     continue;
                 }
-                hits.add(new RecallHit(hit.getKind(), hit.getId(), hit.getTitle(), hit.getExcerpt()));
+                hits.add(new RecallHit(hit.getKind(), hit.getId(), hit.getTitle(),
+                        hit.getExcerpt(), hit.getSummary()));
             }
             return hits;
         } catch (RuntimeException exception) {
@@ -125,7 +126,8 @@ public class ConversationRecall {
                 .eq(Diary::getUserId, CurrentUser.id())
                 .and(item -> match(item, keywords, Diary::getTitle, Diary::getSummary, Diary::getContent))
                 .orderByDesc(Diary::getDiaryDate)).getRecords()) {
-            hits.add(new RecallHit("diary", diary.getId(), diary.getTitle(), Texts.truncate(diary.getSummary(), 80)));
+            String brief = Texts.truncate(diary.getSummary(), 80);
+            hits.add(new RecallHit("diary", diary.getId(), diary.getTitle(), brief, brief));
         }
         return hits;
     }
@@ -136,7 +138,9 @@ public class ConversationRecall {
                 .eq(Experience::getUserId, CurrentUser.id())
                 .and(item -> match(item, keywords, Experience::getTitle, Experience::getProblem, Experience::getLesson))
                 .orderByDesc(Experience::getCreatedAt)).getRecords()) {
-            hits.add(new RecallHit("experience", experience.getId(), experience.getTitle(), Texts.truncate(experience.getProblem(), 80)));
+            hits.add(new RecallHit("experience", experience.getId(), experience.getTitle(),
+                    Texts.truncate(experience.getProblem(), 80),
+                    Texts.truncate(experience.getLesson(), 80)));
         }
         return hits;
     }
@@ -147,7 +151,8 @@ public class ConversationRecall {
                 .eq(Knowledge::getUserId, CurrentUser.id())
                 .and(item -> match(item, keywords, Knowledge::getTitle, Knowledge::getSummary, Knowledge::getContent))
                 .orderByDesc(Knowledge::getUpdatedAt)).getRecords()) {
-            hits.add(new RecallHit("knowledge", knowledge.getId(), knowledge.getTitle(), Texts.truncate(knowledge.getSummary(), 80)));
+            String brief = Texts.truncate(knowledge.getSummary(), 80);
+            hits.add(new RecallHit("knowledge", knowledge.getId(), knowledge.getTitle(), brief, brief));
         }
         return hits;
     }

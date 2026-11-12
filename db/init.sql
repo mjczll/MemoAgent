@@ -133,6 +133,7 @@ CREATE TABLE IF NOT EXISTS conversation (
     user_id BIGINT NOT NULL DEFAULT 1,
     title VARCHAR(200) NOT NULL,
     status VARCHAR(32) NOT NULL,
+    pinned TINYINT NOT NULL DEFAULT 0,
     draft_json MEDIUMTEXT,
     result_json TEXT,
     committed_diary_id BIGINT DEFAULT NULL,

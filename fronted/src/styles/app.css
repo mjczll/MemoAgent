@@ -242,9 +242,13 @@ select {
   height: 12px;
 }
 
+/* 整块不滚动：导航固定，只有下面的「最近」列表自己滚 */
 .rail-scroll {
   flex: 1;
-  overflow-y: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   padding: 2px 8px 8px;
 }
 
@@ -397,6 +401,12 @@ select {
   padding: 18px 24px 56px;
 }
 
+/* 对话页：顶栏加高，标题落在更下方，分隔线整体下移
+   （--topbar-h 同时被 .topbar 的 min-height 与对话区高度使用，改一处两处都对） */
+.main--chat {
+  --topbar-h: 60px;
+}
+
 /* 主区内的内容容器：使用单独类 .main-stack 来限宽居中，
    保证侧栏开合时不会被 max-width "挤压居中" */
 .main-stack {
@@ -419,7 +429,8 @@ select {
   align-items: center;
   gap: 10px;
   padding: 8px 24px;
-  padding-left: calc(var(--rail-w) + 8px);
+  /* 主区（.main）已经用 padding-left 让出了侧栏宽度，这里只留一点呼吸空间 */
+  padding-left: 16px;
   min-height: var(--topbar-h, 41px);
   transition: padding-left 0.28s cubic-bezier(0.4, 0, 0.2, 1);
   border-bottom: 1px solid var(--line);
@@ -438,6 +449,52 @@ select {
 .topbar .crumbs b {
   color: var(--ink);
   font-weight: 500;
+}
+
+.topbar .topbar-title {
+  flex: 0 1 auto;
+  min-width: 0;
+  /* 内边距外扩，文字仍对齐 16px 基准线 */
+  margin-left: -6px;
+  padding: 2px 6px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  text-align: left;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: text;
+  transition: background 0.15s;
+}
+
+.topbar .topbar-title:hover {
+  background: var(--hover);
+}
+
+.topbar .topbar-title-input {
+  flex: 0 1 auto;
+  width: min(320px, 46vw);
+  margin-left: -7px;
+  padding: 2px 6px;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  outline: none;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.topbar .topbar-title-input:focus {
+  border-color: var(--line-1);
 }
 
 .topbar .topbar-spacer {
@@ -1119,6 +1176,21 @@ select {
   border-color: var(--line-2);
   background: var(--surface-2);
   color: var(--ink);
+}
+
+/*
+ * 气泡内的 Markdown 正文：
+ * 1. 不要继承气泡的 pre-wrap —— 渲染出来的 HTML 里有换行符，会被当成空行撑高；
+ * 2. 行距对齐气泡本身，而不是正文页那边的 1.85；
+ * 3. 最后一段不留外边距，否则气泡底部会空出一截。
+ */
+.bubble .md {
+  white-space: normal;
+  line-height: 1.72;
+}
+
+.bubble .md > *:last-child {
+  margin-bottom: 0;
 }
 
 .bubble .who {
@@ -2001,11 +2073,16 @@ details.fold .fold-body {
 }
 
 /* ---------- 紧凑会话列表（ThreadRow 风格） ---------- */
+/* 占满导航下方剩余高度并独立滚动，导航项不会跟着一起滚 */
 .thread-list {
   display: flex;
   flex-direction: column;
   gap: 1px;
   margin: 4px 0 0;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .thread-empty {
@@ -2065,6 +2142,104 @@ details.fold .fold-body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* 置顶标记：标题前的小圆点 */
+.thread-pin {
+  flex: 0 0 auto;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent, #9bd0ff);
+}
+
+/* 行内重命名：直接顶替标题位置，高度与一行文字接近，不撑高整行 */
+.thread-row.is-editing {
+  cursor: text;
+}
+
+.thread-row .thread-rename {
+  flex: 1;
+  min-width: 0;
+  padding: 0 5px;
+  border: 1px solid var(--accent, #4a7dff);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  outline: none;
+}
+
+/* 「⋯」入口：平时隐藏，悬浮或当前对话时出现；触摸设备上没有 hover，直接常显 */
+.thread-more {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--mute);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.thread-row:hover .thread-more,
+.thread-row.is-on .thread-more {
+  opacity: 1;
+}
+
+.thread-more:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+@media (hover: none) {
+  .thread-more {
+    opacity: 1;
+  }
+}
+
+/* 对话操作菜单：fixed 定位到「⋯」下方，宽度与按钮右边缘对齐 */
+.thread-menu {
+  position: fixed;
+  z-index: 140;
+  box-sizing: border-box;
+  width: 132px;
+  padding: 4px;
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+}
+
+.thread-menu button {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.thread-menu button:hover {
+  background: var(--hover);
+}
+
+.thread-menu button.danger {
+  color: var(--danger, #e66);
 }
 
 .thread-row .thread-meta {

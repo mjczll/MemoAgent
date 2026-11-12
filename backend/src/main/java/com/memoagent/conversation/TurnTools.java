@@ -15,10 +15,20 @@ import java.util.Set;
  */
 public class TurnTools {
 
+    /**
+     * 兜底引用最多挂几条。挂太多会让模型倾向于「报清单」而不是讲内容，
+     * 也把页面塞得很满；真正相关的通常不会超过三条。
+     */
+    private static final int MAX_FALLBACK_REFS = 3;
+
     private final Set<Long> diaryIds;
     private final Set<Long> experienceIds;
     private final Set<Long> knowledgeIds;
     private final Map<String, String> titles = new LinkedHashMap<>();
+    /** 引用抽屉要展示摘要，构造时和 title 一起从命中里带出来 */
+    private final Map<String, String> excerpts = new LinkedHashMap<>();
+    /** 一句话概括，经验取结论 */
+    private final Map<String, String> summaries = new LinkedHashMap<>();
 
     private final List<RecallHit> hits;
 
@@ -37,6 +47,8 @@ public class TurnTools {
                     continue;
                 }
                 titles.put(key(hit.type(), hit.id()), hit.title());
+                excerpts.put(key(hit.type(), hit.id()), hit.excerpt());
+                summaries.put(key(hit.type(), hit.id()), hit.summary());
                 if ("diary".equals(hit.type())) {
                     diaries.add(hit.id());
                 } else if ("experience".equals(hit.type())) {
@@ -132,6 +144,9 @@ public class TurnTools {
         }
         if (refs.isEmpty()) {
             for (RecallHit hit : hits) {
+                if (refs.size() >= MAX_FALLBACK_REFS) {
+                    break;
+                }
                 if (hit.id() == null || "knowledge".equals(hit.type()) || !containsStrong(hit, strong)) {
                     continue;
                 }
@@ -204,6 +219,8 @@ public class TurnTools {
             ref.setType(type);
             ref.setId(id);
             ref.setTitle(titles.getOrDefault(key(type, id), ""));
+            ref.setExcerpt(excerpts.get(key(type, id)));
+            ref.setSummary(summaries.get(key(type, id)));
             refs.add(ref);
             added += 1;
         }

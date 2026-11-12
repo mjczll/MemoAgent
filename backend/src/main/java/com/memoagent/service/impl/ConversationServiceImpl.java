@@ -22,6 +22,7 @@ import com.memoagent.conversation.RecallHit;
 import com.memoagent.conversation.TurnTools;
 import com.memoagent.conversation.StoredDraft;
 import com.memoagent.conversation.StoredKnowledgeCandidate;
+import com.memoagent.conversation.StreamTextCleaner;
 import com.memoagent.conversation.TurnReply;
 import com.memoagent.conversation.TurnSanitizer;
 import com.memoagent.dto.ConversationChoiceRequest;
@@ -108,12 +109,36 @@ public class ConversationServiceImpl implements ConversationService {
     public List<ConversationListItemVO> list() {
         return conversationMapper.selectList(Wrappers.<Conversation>lambdaQuery()
                         .eq(Conversation::getUserId, CurrentUser.id())
+                        // 置顶优先，其余按最近更新
+                        .orderByDesc(Conversation::getPinned)
                         .orderByDesc(Conversation::getUpdatedAt)
                         .orderByDesc(Conversation::getId)
                         .last("limit 50"))
                 .stream()
                 .map(this::toListItem)
                 .toList();
+    }
+
+    @Override
+    @Transactional
+    public ConversationListItemVO rename(Long id, String title) {
+        Conversation conversation = requireOwned(id);
+        if (!StringUtils.hasText(title)) {
+            throw BusinessException.badRequest("标题不能为空");
+        }
+        conversation.setTitle(Texts.truncate(title.trim(), 200));
+        // 刻意不刷新 updatedAt：改名不该让这条对话跳到「最近」最前面
+        conversationMapper.updateById(conversation);
+        return toListItem(conversation);
+    }
+
+    @Override
+    @Transactional
+    public ConversationListItemVO pin(Long id, boolean pinned) {
+        Conversation conversation = requireOwned(id);
+        conversation.setPinned(pinned);
+        conversationMapper.updateById(conversation);
+        return toListItem(conversation);
     }
 
     @Override
@@ -176,8 +201,10 @@ public class ConversationServiceImpl implements ConversationService {
         subscription.set(conversationModel.streamReply(prompt, tools).subscribe(
                 token -> {
                     if (token != null && !token.isEmpty()) {
+                        // visible 保留原始内容，收尾时统一清洗；推到前端的先剥掉工具标记
                         visible.append(token);
-                        if (!emitVisible(emitter, token)) {
+                        String safe = StreamTextCleaner.cleanChunk(token);
+                        if (StringUtils.hasText(safe) && !emitVisible(emitter, safe)) {
                             stop.run();
                         }
                     }
@@ -292,7 +319,8 @@ public class ConversationServiceImpl implements ConversationService {
         }
         List<RecallHit> hits = conversationRecall.find(text);
         TurnSanitizer.SanitizedTurn turn = produceTurn(conversation.getId(), text, hits);
-        insertMessage(conversation.getId(), ASSISTANT, turn.kind(), turn.text(), turn.payload());
+        insertMessage(conversation.getId(), ASSISTANT, turn.kind(),
+                StreamTextCleaner.clean(turn.text()), turn.payload());
         if (DRAFTED.equals(conversation.getStatus())) {
             conversation.setStatus(ACTIVE);
         }
@@ -325,7 +353,7 @@ public class ConversationServiceImpl implements ConversationService {
             return;
         }
         try {
-            String text = visible.toString().strip();
+            String text = StreamTextCleaner.clean(visible.toString().strip());
             if (stopped && !StringUtils.hasText(text)) {
                 completeQuietly(emitter);
                 return;
@@ -749,6 +777,7 @@ public class ConversationServiceImpl implements ConversationService {
         vo.setId(conversation.getId());
         vo.setTitle(conversation.getTitle());
         vo.setStatus(conversation.getStatus());
+        vo.setPinned(Boolean.TRUE.equals(conversation.getPinned()));
         vo.setUpdatedAt(conversation.getUpdatedAt());
         return vo;
     }

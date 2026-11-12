@@ -38,6 +38,11 @@ public class MessagePayload {
         private String type;
         private Long id;
         private String title;
+        /** 回查 MySQL 得到的摘要，供引用抽屉展示；历史消息可能为空 */
+        private String excerpt;
+
+        /** 一句话概括，经验取结论，引用卡片优先展示它 */
+        private String summary;
     }
 
     @Data
