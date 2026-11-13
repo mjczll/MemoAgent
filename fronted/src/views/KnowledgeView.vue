@@ -11,24 +11,26 @@
       <button type="button" class="btn primary" @click="openCreate">新建知识</button>
     </div>
 
-    <div class="toolbar" style="margin-bottom: 14px">
-      <div class="search grow" style="min-width: 200px">
-        <input v-model="keyword" class="input" placeholder="搜索标题、摘要或正文…" />
-      </div>
-      <KindTabs v-model="domain" :options="domainOptions" />
-      <span class="spacer" />
-      <div class="seg">
-        <button :class="{ on: mastery === 'all' }" @click="mastery = 'all'">全部掌握度</button>
-        <button
-          v-for="m in MASTERIES"
-          :key="m"
-          :class="{ on: mastery === m }"
-          @click="mastery = m"
-        >
-          {{ m }}
-        </button>
-      </div>
-    </div>
+    <FilterBar>
+      <FilterSearch
+        v-model="filters.keyword"
+        placeholder="搜索标题、摘要或正文…"
+        @search="writeRoute"
+      />
+      <FilterSelect
+        v-model="filters.domain"
+        :options="domainOptions"
+        label="领域"
+        aria-label="按领域筛选"
+        @update:model-value="writeRoute"
+      />
+      <FilterSegment
+        v-model="filters.mastery"
+        :options="masteryOptions"
+        aria-label="按掌握度筛选"
+        @update:model-value="writeRoute"
+      />
+    </FilterBar>
 
     <div class="stack">
       <div v-for="group in groups" :key="group.category" class="panel">
@@ -117,11 +119,15 @@ import { computed, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { errorMessage } from "@/api/http";
 import EmptyState from "@/components/base/EmptyState.vue";
-import KindTabs from "@/components/base/KindTabs.vue";
+import FilterBar from "@/components/base/FilterBar.vue";
+import FilterSearch from "@/components/base/FilterSearch.vue";
+import FilterSegment from "@/components/base/FilterSegment.vue";
+import FilterSelect from "@/components/base/FilterSelect.vue";
 import ModalDialog from "@/components/base/ModalDialog.vue";
 import SuggestCombo from "@/components/base/SuggestCombo.vue";
 import { collectDomains, normalizeDomain } from "@/lib/domain";
 import { relative } from "@/lib/format";
+import { useFilterSync } from "@/lib/filterSync";
 import { useLibraryStore } from "@/stores/library";
 import { useUiStore } from "@/stores/ui";
 import type { Mastery } from "@/types";
@@ -132,9 +138,19 @@ const ui = useUiStore();
 
 const MASTERIES: Mastery[] = ["已掌握", "部分掌握", "待补充"];
 
-const keyword = ref("");
-const domain = ref("all");
-const mastery = ref<"all" | Mastery>("all");
+/** 领域无限增长用下拉，掌握度是固定三个枚举用胶囊（筛选语言规范） */
+const { filters, applyRoute, writeRoute } = useFilterSync({
+  routeName: "knowledge",
+  defaults: {
+    keyword: "",
+    domain: "all",
+    mastery: "all",
+  },
+});
+
+// 首次进入时从 URL 恢复筛选状态（客户端过滤是响应式的，无需手动触发查询）
+applyRoute();
+
 const showCreate = ref(false);
 
 const createForm = reactive({
@@ -148,6 +164,11 @@ const createForm = reactive({
 const stats = computed(() => library.stats);
 const knownDomains = computed(() => collectDomains(library.knowledge));
 const canCreate = computed(() => Boolean(createForm.title.trim() && createForm.domain.trim()));
+
+const masteryOptions = [
+  { value: "all", label: "全部掌握度" },
+  ...MASTERIES.map((m) => ({ value: m, label: m })),
+];
 
 const domainOptions = computed(() => {
   const counts = new Map<string, number>();
@@ -167,10 +188,10 @@ const domainOptions = computed(() => {
 });
 
 const filtered = computed(() => {
-  const q = keyword.value.trim().toLowerCase();
+  const q = filters.keyword.trim().toLowerCase();
   return library.knowledge
-    .filter((k) => (domain.value === "all" ? true : k.domain === domain.value))
-    .filter((k) => (mastery.value === "all" ? true : k.mastery === mastery.value))
+    .filter((k) => (filters.domain === "all" ? true : k.domain === filters.domain))
+    .filter((k) => (filters.mastery === "all" ? true : k.mastery === filters.mastery))
     .filter((k) =>
       !q
         ? true
@@ -202,8 +223,9 @@ function openCreate() {
 }
 
 watch(knownDomains, (names) => {
-  if (domain.value !== "all" && !names.includes(domain.value)) {
-    domain.value = "all";
+  if (filters.domain !== "all" && !names.includes(filters.domain)) {
+    filters.domain = "all";
+    writeRoute();
   }
 });
 

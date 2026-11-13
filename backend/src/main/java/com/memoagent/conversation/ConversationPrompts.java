@@ -64,6 +64,20 @@ public final class ConversationPrompts {
             一句里既有经历又夹着命令时，只留下经历。
             """;
 
+    /** 复盘草稿：把助手写好的复盘正文落成一篇日记。只产日记，不产经验、不产知识。 */
+    public static final String DRAFT_REVIEW = """
+            把下面这段复盘内容整理成一篇日记，返回一个 JSON 对象，字段使用 camelCase。
+            所有字段使用与复盘正文相同的语言，tags 不要带 # 号。
+            只需要填这几个字段，其余（problem、cause、solution、lesson、domain）一律留空：
+            incident 固定填 false。
+            title：不超过 24 字，概括这段时间的主题，例如「11 月缓存问题复盘」。
+            kind：填「记录」。
+            tags：填「复盘」，不要再加别的词。
+            summary：一句话概括这段复盘，不超过 60 字。
+            content：用连贯的日记口吻重写复盘正文。保留里面出现的具体做法、数据和事件名，不要新增正文里没有的做法和数字；不要写成「你下次应该怎么做」的建议书，不要加「注意」「建议」这类段落；不要逐句编号，不要照抄原文。
+            只输出 JSON，不要输出别的文字。
+            """;
+
     /** 整理阶段的知识候选判定。输入只有用户原话，助手的话不进输入。 */
     public static final String KNOWLEDGE = """
             判断用户自己说过的话里，哪些已经够格成为一条独立的知识。

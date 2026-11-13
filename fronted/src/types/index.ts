@@ -89,8 +89,8 @@ export interface Diary {
   knowledgeIds: string[];
   experienceCount?: number;
   knowledgeCount?: number;
-  /** 来源：采访生成 / 手动记录 */
-  origin: "interview" | "manual";
+  /** 来源：采访生成 / 手动记录 / 复盘汇总 */
+  origin: "interview" | "manual" | "review";
   createdAt: string;
 }
 

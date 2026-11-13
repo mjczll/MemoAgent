@@ -15,7 +15,7 @@
             <span>·</span>
             <span>{{ diary.kind }}</span>
             <span>·</span>
-            <span>{{ diary.origin === "interview" ? "由采访生成" : "手动记录" }}</span>
+            <span>{{ originLabel(diary.origin) }}</span>
           </div>
           <div class="tags" style="margin-top: 10px">
             <TagRow :tags="diary.tags" @pick="searchTag" />
@@ -454,5 +454,11 @@ function openWiki(title: string) {
   const hit = library.knowledgeByTitle(title);
   if (hit) router.push(`/knowledge/${hit.id}`);
   else ui.toast(`还没有「${title}」这条知识，去知识库新建一条吧`, "info");
+}
+
+function originLabel(origin: string) {
+  if (origin === "interview") return "由采访生成";
+  if (origin === "review") return "复盘汇总";
+  return "手动记录";
 }
 </script>

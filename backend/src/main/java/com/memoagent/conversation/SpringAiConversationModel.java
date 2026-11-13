@@ -63,6 +63,15 @@ public class SpringAiConversationModel implements ConversationModel {
     }
 
     @Override
+    public DraftReply draftReview(String prompt) {
+        return chatClient.prompt()
+                .system(ConversationPrompts.DRAFT_REVIEW)
+                .user(prompt)
+                .call()
+                .entity(DraftReply.class);
+    }
+
+    @Override
     public KnowledgeResponse knowledge(String prompt) {
         return chatClient.prompt()
                 .system(ConversationPrompts.KNOWLEDGE)

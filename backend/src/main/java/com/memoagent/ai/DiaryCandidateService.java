@@ -64,6 +64,10 @@ public class DiaryCandidateService {
             log.debug("日记 #{} 来自采访，已有经验，跳过自动提取", diaryId);
             return;
         }
+        if (DiaryOrigins.REVIEW.equals(diary.getOrigin())) {
+            log.debug("日记 #{} 是复盘汇总，不是一手事实，跳过自动提取", diaryId);
+            return;
+        }
         if (hasCandidate(diaryId)) {
             log.debug("日记 #{} 已有候选，跳过自动提取", diaryId);
             return;

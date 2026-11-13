@@ -12,6 +12,9 @@ public interface ConversationModel {
 
     DraftReply draft(String prompt);
 
+    /** 复盘草稿：素材是助手写好的复盘正文，产出与 draft 同构的 DTO，但只关心 title/summary/content/kind/tags。 */
+    DraftReply draftReview(String prompt);
+
     KnowledgeResponse knowledge(String prompt);
 
     /** 生成会话标题：只返回一行短语，模型不可用时返回 null。 */

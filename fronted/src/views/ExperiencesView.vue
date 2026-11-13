@@ -10,12 +10,20 @@
       <button class="btn" @click="router.push('/graph')">在关系图谱中查看</button>
     </div>
 
-    <div class="toolbar" style="margin-bottom: 14px">
-      <div class="search grow" style="min-width: 200px">
-        <input v-model="keyword" class="input" placeholder="搜索问题、解法或经验…" />
-      </div>
-      <KindTabs v-model="domain" :options="domainOptions" />
-    </div>
+    <FilterBar>
+      <FilterSearch
+        v-model="filters.keyword"
+        placeholder="搜索问题、解法或经验…"
+        @search="writeRoute"
+      />
+      <FilterSelect
+        v-model="filters.domain"
+        :options="domainOptions"
+        label="领域"
+        aria-label="按领域筛选"
+        @update:model-value="writeRoute"
+      />
+    </FilterBar>
 
     <div class="grid cols-3">
       <EntryCard
@@ -43,18 +51,27 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed } from "vue";
 import { useRouter } from "vue-router";
 import EmptyState from "@/components/base/EmptyState.vue";
 import EntryCard from "@/components/base/EntryCard.vue";
-import KindTabs from "@/components/base/KindTabs.vue";
+import FilterBar from "@/components/base/FilterBar.vue";
+import FilterSearch from "@/components/base/FilterSearch.vue";
+import FilterSelect from "@/components/base/FilterSelect.vue";
+import { useFilterSync } from "@/lib/filterSync";
 import { useLibraryStore } from "@/stores/library";
 
 const router = useRouter();
 const library = useLibraryStore();
 
-const keyword = ref("");
-const domain = ref("all");
+/** 领域会随记录无限增长，所以用下拉而不是胶囊（筛选语言规范） */
+const { filters, applyRoute, writeRoute } = useFilterSync({
+  routeName: "experiences",
+  defaults: {
+    keyword: "",
+    domain: "all",
+  },
+});
 
 const domainOptions = computed(() => {
   const counts = library.domainCounts;
@@ -68,9 +85,9 @@ const domainOptions = computed(() => {
 });
 
 const list = computed(() => {
-  const q = keyword.value.trim().toLowerCase();
+  const q = filters.keyword.trim().toLowerCase();
   return library.experiences
-    .filter((e) => (domain.value === "all" ? true : e.domain === domain.value))
+    .filter((e) => (filters.domain === "all" ? true : e.domain === filters.domain))
     .filter((e) =>
       !q
         ? true
@@ -80,4 +97,7 @@ const list = computed(() => {
             .includes(q),
     );
 });
+
+// 首次进入时从 URL 恢复筛选状态（客户端过滤是响应式的，无需手动触发查询）
+applyRoute();
 </script>

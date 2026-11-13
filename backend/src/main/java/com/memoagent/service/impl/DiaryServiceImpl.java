@@ -28,6 +28,7 @@ import com.memoagent.service.DiaryService;
 import com.memoagent.vo.DiaryDetailVO;
 import com.memoagent.vo.DiaryListItemVO;
 import com.memoagent.vo.PageData;
+import com.memoagent.vo.TagCountVO;
 import com.memoagent.vector.AssetVectorEvent;
 import com.memoagent.vector.VectorSourceTypes;
 import lombok.RequiredArgsConstructor;
@@ -95,11 +96,21 @@ public class DiaryServiceImpl implements DiaryService {
         if (StringUtils.hasText(query.getKind()) && !"all".equalsIgnoreCase(query.getKind())) {
             wrapper.eq(Diary::getKind, query.getKind().trim());
         }
+        if (StringUtils.hasText(query.getOrigin()) && !"all".equalsIgnoreCase(query.getOrigin())) {
+            wrapper.eq(Diary::getOrigin, DiaryOrigins.normalize(query.getOrigin()));
+        }
         if (StringUtils.hasText(query.getKeyword())) {
             String keyword = query.getKeyword().trim();
             wrapper.and(item -> item.like(Diary::getTitle, keyword)
                     .or().like(Diary::getSummary, keyword)
                     .or().like(Diary::getContent, keyword));
+        }
+        if (StringUtils.hasText(query.getTag()) && !"all".equalsIgnoreCase(query.getTag())) {
+            List<Long> taggedIds = diaryIdsByTag(query.getTag().trim());
+            if (taggedIds.isEmpty()) {
+                return new PageData<>(List.of(), 0, query.getPage(), query.getSize());
+            }
+            wrapper.in(Diary::getId, taggedIds);
         }
         wrapper.orderBy(true, asc, Diary::getDiaryDate)
                 .orderBy(true, asc, Diary::getCreatedAt)
@@ -119,6 +130,34 @@ public class DiaryServiceImpl implements DiaryService {
     public DiaryDetailVO get(Long id) {
         Diary diary = requireOwned(id);
         return toDetail(diary, loadTagNames(List.of(id)).getOrDefault(id, List.of()));
+    }
+
+    @Override
+    public List<TagCountVO> tagSummary() {
+        List<Diary> diaries = diaryMapper.selectList(Wrappers.<Diary>lambdaQuery()
+                .eq(Diary::getUserId, CurrentUser.id())
+                .select(Diary::getId));
+        if (diaries.isEmpty()) {
+            return List.of();
+        }
+        List<Long> ids = diaries.stream().map(Diary::getId).toList();
+        Map<Long, List<String>> tagsByDiary = loadTagNames(ids);
+        Map<String, Long> counts = new LinkedHashMap<>();
+        for (List<String> names : tagsByDiary.values()) {
+            for (String name : names) {
+                counts.merge(name, 1L, Long::sum);
+            }
+        }
+        return counts.entrySet().stream()
+                .sorted(Map.Entry.<String, Long>comparingByValue().reversed()
+                        .thenComparing(Map.Entry::getKey))
+                .map(entry -> {
+                    TagCountVO vo = new TagCountVO();
+                    vo.setName(entry.getKey());
+                    vo.setCount(entry.getValue());
+                    return vo;
+                })
+                .toList();
     }
 
     @Override
@@ -212,8 +251,26 @@ public class DiaryServiceImpl implements DiaryService {
         return tag;
     }
 
-    private Map<Long, List<String>> loadTagNames(List<Long> diaryIds) {
+    /** 按标签名查打了该标签的日记 id（当前用户的日记范围内）。 */
+    private List<Long> diaryIdsByTag(String tagName) {
+        Tag tag = tagMapper.selectOne(Wrappers.<Tag>lambdaQuery().eq(Tag::getName, tagName).last("LIMIT 1"));
+        if (tag == null) {
+            return List.of();
+        }
+        List<Long> diaryIds = diaryMapper.selectList(Wrappers.<Diary>lambdaQuery()
+                        .eq(Diary::getUserId, CurrentUser.id())
+                        .select(Diary::getId))
+                .stream().map(Diary::getId).toList();
         if (diaryIds.isEmpty()) {
+            return List.of();
+        }
+        return diaryTagMapper.selectList(Wrappers.<DiaryTag>lambdaQuery()
+                        .eq(DiaryTag::getTagId, tag.getId())
+                        .in(DiaryTag::getDiaryId, diaryIds))
+                .stream().map(DiaryTag::getDiaryId).distinct().toList();
+    }
+
+    private Map<Long, List<String>> loadTagNames(List<Long> diaryIds) {        if (diaryIds.isEmpty()) {
             return Map.of();
         }
         List<DiaryTag> relations = diaryTagMapper.selectList(

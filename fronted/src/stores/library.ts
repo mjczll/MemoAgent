@@ -83,6 +83,7 @@ export const useLibraryStore = defineStore("library", {
         ...state.experiences.map((e) => e.domain),
       ]).size;
       const interviewOrigin = state.diaries.filter((d) => d.origin === "interview").length;
+      const reviewOrigin = state.diaries.filter((d) => d.origin === "review").length;
       return {
         diaries: state.diaries.length,
         experiences: state.experiences.length,
@@ -93,6 +94,7 @@ export const useLibraryStore = defineStore("library", {
           : 0,
         domains: domainCount,
         interviewOrigin,
+        reviewOrigin,
         linkCount: state.knowledge.reduce((sum, k) => sum + k.relatedIds.length, 0),
       };
     },

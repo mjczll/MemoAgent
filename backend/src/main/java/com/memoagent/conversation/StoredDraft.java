@@ -12,6 +12,12 @@ public class StoredDraft {
 
     private boolean incident;
 
+    /** 这份草稿是不是复盘汇总。复盘只落一篇日记（origin=review），不产经验、不产知识。 */
+    private boolean review;
+
+    /** 复盘覆盖的日期区间（供正文落款与日期回填），形如 2026-11-01 ~ 2026-11-30 */
+    private String range;
+
     private String title;
 
     private String date;

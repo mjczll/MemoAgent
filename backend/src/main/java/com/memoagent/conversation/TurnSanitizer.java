@@ -13,6 +13,7 @@ public final class TurnSanitizer {
     public static final String RECALL = "recall";
     public static final String SUPPLEMENT = "supplement";
     public static final String ASSOCIATION = "association";
+    public static final String REVIEW = "review";
 
     private TurnSanitizer() {
     }
@@ -65,7 +66,7 @@ public final class TurnSanitizer {
     }
 
     private static String normalizeKind(String kind) {
-        if (RECALL.equals(kind) || SUPPLEMENT.equals(kind) || ASSOCIATION.equals(kind)) {
+        if (RECALL.equals(kind) || SUPPLEMENT.equals(kind) || ASSOCIATION.equals(kind) || REVIEW.equals(kind)) {
             return kind;
         }
         return INTERVIEW;

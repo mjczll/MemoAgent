@@ -14,8 +14,8 @@ import com.memoagent.vo.DiaryDetailVO;
 import com.memoagent.vo.DiaryListItemVO;
 import com.memoagent.vo.PageData;
 import com.memoagent.vo.SearchResultVO;
-import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
+import com.memoagent.vo.TagCountVO;
+import jakarta.validation.Valid;import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -25,6 +25,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/diaries")
@@ -48,6 +50,12 @@ public class DiaryController {
     @GetMapping
     public Result<PageData<DiaryListItemVO>> list(DiaryQuery query) {
         return Result.ok(diaryService.list(query));
+    }
+
+    /** 标签及各自篇数，供日记页筛选条渲染。 */
+    @GetMapping("/tags")
+    public Result<List<TagCountVO>> tags() {
+        return Result.ok(diaryService.tagSummary());
     }
 
     @GetMapping("/{id}")

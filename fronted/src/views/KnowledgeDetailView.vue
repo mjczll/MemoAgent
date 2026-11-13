@@ -58,18 +58,15 @@
         <div class="panel">
           <div class="panel-head"><b>掌握度</b></div>
           <div class="panel-body stack" style="gap: 10px">
-            <div class="seg" style="align-self: flex-start">
-              <button
-                v-for="m in MASTERIES"
-                :key="m"
-                :class="{ on: item.mastery === m }"
-                @click="setMastery(m)"
-              >
-                {{ m }}
-              </button>
-            </div>
+            <EditorSegment
+              :model-value="item.mastery"
+              :options="MASTERIES"
+              aria-label="修改掌握度"
+              style="align-self: flex-start"
+              @update:model-value="setMastery($event as Mastery)"
+            />
             <p class="small faint" style="margin: 0">
-              标记为「已掌握」的知识会计入首页掌握率。
+              这里是修改知识状态，不是筛选列表；标记为「已掌握」会计入首页掌握率。
             </p>
           </div>
         </div>
@@ -188,6 +185,7 @@
 import { computed, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import CompareRow from "@/components/base/CompareRow.vue";
+import EditorSegment from "@/components/base/EditorSegment.vue";
 import EmptyState from "@/components/base/EmptyState.vue";
 import MarkdownView from "@/components/base/MarkdownView.vue";
 import ModalDialog from "@/components/base/ModalDialog.vue";

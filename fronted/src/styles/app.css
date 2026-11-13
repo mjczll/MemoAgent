@@ -465,10 +465,11 @@ select {
   min-width: 0;
   /* 内边距外扩，文字仍对齐 16px 基准线 */
   margin-left: -6px;
-  padding: 2px 6px;
+  padding: 2px 8px;
   overflow: hidden;
   border: 0;
-  border-radius: 6px;
+  /* 悬浮时呈现为「被选中」的胶囊 */
+  border-radius: 999px;
   background: transparent;
   color: var(--ink);
   font: inherit;
@@ -478,28 +479,55 @@ select {
   text-align: left;
   white-space: nowrap;
   text-overflow: ellipsis;
-  cursor: text;
-  transition: background 0.15s;
+  cursor: pointer;
+  transition: background 0.15s, box-shadow 0.15s;
 }
 
 .topbar .topbar-title:hover {
-  background: var(--hover);
+  background: var(--hover-strong);
+  box-shadow: inset 0 0 0 1px var(--accent-line);
+  color: var(--accent-2);
 }
 
 .topbar .topbar-title-input {
   flex: 0 1 auto;
-  width: min(320px, 46vw);
-  margin-left: -7px;
-  padding: 2px 6px;
-  border: 1px solid var(--line-2);
-  border-radius: 6px;
+  /* 宽度由组件内联样式按内容测量给出；这里只约束上下限 */
+  min-width: 96px;
+  max-width: 480px;
+  /* 与胶囊完全同位：无边框（用内阴影代替），左边距同 -6px */
+  margin-left: -6px;
+  padding: 2px 8px;
+  border: 0;
+  /* 编辑态与悬浮胶囊同形同宽：描边用内阴影，不占布局尺寸 */
+  border-radius: 999px;
   outline: none;
   background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line-2);
   color: var(--ink);
   font: inherit;
   font-size: 13px;
   font-weight: 500;
   line-height: 1.5;
+}
+
+.topbar .topbar-title-input:focus {
+  box-shadow: inset 0 0 0 1px var(--line-1);
+  background: var(--paper-2);
+}
+
+/* 隐藏镜像：与编辑框同字体同内边距，用于测量文字实际宽度 */
+.topbar .topbar-title-sizer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  visibility: hidden;
+  white-space: pre;
+  padding: 2px 8px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  pointer-events: none;
 }
 
 .topbar .topbar-title-input:focus {
@@ -2696,3 +2724,228 @@ details.fold .fold-body {
 /* ---------- 折叠后整体过渡 ----------
    - .rail 瞬时切换：避免主区内容被"挤压居中"造成中间帧画面
    - .main / .main-inner / .main-stack 同步瞬时跟随，layout 不抖动 */
+
+/* ---------- 筛选体系（FilterBar / FilterSearch / FilterSegment / FilterSelect / TagChips / EditorSegment） ---------- */
+:root {
+  --filter-height: 34px;
+  --filter-chip-height: 30px;
+  --filter-radius: 9px;
+  --filter-gap: 8px;
+  --filter-font-size: 13px;
+}
+
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--filter-gap);
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  margin-bottom: 12px;
+}
+
+/* 所有筛选控件的统一基础尺寸 */
+.filter-control {
+  height: var(--filter-height);
+  border: 1px solid var(--line);
+  border-radius: var(--filter-radius);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: var(--filter-font-size);
+}
+
+/* 搜索 */
+.filter-search {
+  position: relative;
+  flex: 1 1 220px;
+  min-width: 200px;
+}
+
+.filter-search .input {
+  width: 100%;
+  height: var(--filter-height);
+  padding: 0 11px;
+  font-size: var(--filter-font-size);
+}
+
+/* 少量固定枚举：胶囊组 */
+.filter-segment {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px;
+  background: var(--paper-2);
+  border-color: var(--line-2);
+}
+
+.filter-segment button {
+  height: 100%;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--mute);
+  font-size: var(--filter-font-size);
+  cursor: pointer;
+}
+
+.filter-segment button:hover {
+  color: var(--ink);
+}
+
+.filter-segment button.on {
+  background: var(--accent-soft);
+  color: var(--accent-2);
+}
+
+/* 带前缀标签的下拉字段 */
+.filter-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  background: var(--paper-2);
+  border-color: var(--line-2);
+}
+
+.filter-label {
+  color: var(--mute);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.filter-select {
+  width: auto;
+  min-width: 88px;
+  max-width: 220px;
+  height: calc(var(--filter-height) - 8px);
+  padding: 0 20px 0 6px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink);
+  font-size: var(--filter-font-size);
+  cursor: pointer;
+  outline: none;
+}
+
+/* 标签集合：圆角 chips，比 Segment 低半档 */
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.filter-chip {
+  height: var(--filter-chip-height);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--mute);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.14s, border-color 0.14s, background 0.14s;
+}
+
+.filter-chip:hover {
+  color: var(--ink);
+  border-color: var(--accent-line);
+  background: var(--hover);
+}
+
+.filter-chip.on {
+  color: var(--accent-2);
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+
+.filter-chip.clear {
+  border-style: dashed;
+}
+
+/* 弱化计数：数字不抢主标签的视觉权重 */
+.filter-count {
+  margin-left: 5px;
+  font-size: 11px;
+  color: var(--mute);
+}
+
+/* 原生 select 展开的选项浮层不继承页面背景：
+   暗色主题下文字是浅色而浮层是系统默认白底，几乎不可读。
+   显式给 option 上背景与文字色，亮暗主题都成立。 */
+select option {
+  background-color: var(--paper-2);
+  color: var(--ink);
+}
+
+.filter-segment button.on .filter-count,
+.filter-chip.on .filter-count {
+  color: inherit;
+  opacity: 0.72;
+}
+
+/* 编辑控件：与筛选明确区分——圆点指示 + 描边选中 */
+.editor-segment {
+  display: inline-flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.editor-segment button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--filter-height);
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--filter-radius);
+  background: var(--surface);
+  color: var(--mute);
+  font-size: var(--filter-font-size);
+  cursor: pointer;
+}
+
+.editor-segment button:hover {
+  color: var(--ink);
+  border-color: var(--accent-line);
+}
+
+.editor-segment button.on {
+  color: var(--accent-2);
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  font-weight: 500;
+}
+
+.editor-segment .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  border: 1.5px solid currentColor;
+  background: transparent;
+}
+
+.editor-segment button.on .dot {
+  background: currentColor;
+}
+
+@media (max-width: 768px) {
+  /* 移动端：搜索独占一行，筛选允许换行但不撑爆 */
+  .filter-bar > .filter-search {
+    flex-basis: 100%;
+  }
+
+  .filter-bar {
+    row-gap: 8px;
+  }
+
+  .filter-select {
+    max-width: 160px;
+  }
+}

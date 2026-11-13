@@ -73,6 +73,33 @@ public final class DraftSanitizer {
         return draft;
     }
 
+    /**
+     * 复盘草稿：素材是助手写好的复盘正文，落成一篇 origin=review 的日记。
+     * 只填标题/摘要/正文/类型/标签，经验四件套与领域留空，不产知识候选。
+     */
+    public static StoredDraft sanitizeReview(DraftReply reply, String reviewText) {
+        DraftReply source = reply == null ? new DraftReply() : reply;
+        String fallback = reviewText == null ? "" : reviewText;
+        StoredDraft draft = new StoredDraft();
+        draft.setReview(true);
+        draft.setIncident(false);
+        draft.setDate(LocalDate.now().toString());
+        draft.setTitle(firstText(omitCommands(source.getTitle()), Texts.truncate(fallback, 24)));
+        draft.setKind("记录");
+        draft.setDomain("");
+        draft.setTags(cleanTags(source.getTags(), ""));
+        if (!draft.getTags().contains("复盘")) {
+            draft.getTags().add("复盘");
+        }
+        draft.setSummary(firstText(omitCommands(source.getSummary()), Texts.truncate(fallback, 60)));
+        draft.setContent(firstText(omitCommands(source.getContent()), fallback));
+        draft.setProblem("");
+        draft.setCause("");
+        draft.setSolution("");
+        draft.setLesson("");
+        return draft;
+    }
+
     public static String omitCommands(String text) {
         if (text == null || text.isBlank()) {
             return "";

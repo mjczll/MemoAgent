@@ -2,13 +2,14 @@
   <header class="topbar">
     <button class="icon-btn menu-btn" title="菜单" @click="emit('toggle-rail')">☰</button>
 
-    <!-- 对话页：标题放在顶栏内，点击即可重命名 -->
+    <!-- 对话页：标题放在顶栏内，点击即可重命名；编辑框宽度与胶囊一致并随输入增长 -->
     <template v-if="showTitle && title">
       <input
         v-if="editingTop"
         ref="topInput"
         v-model="topDraft"
         class="topbar-title-input"
+        :style="{ width: inputWidth }"
         maxlength="200"
         @keydown.enter.prevent="commitTop"
         @keydown.esc.prevent="cancelTop"
@@ -24,6 +25,8 @@
         {{ title }}
       </button>
     </template>
+    <!-- 隐藏镜像：测量标题文字的实际宽度，驱动编辑框宽度 -->
+    <span ref="sizer" class="topbar-title-sizer" aria-hidden="true">{{ topDraft || "　" }}</span>
 
     <div class="topbar-spacer">
       <!-- Interview / Agent 路由下显示可点击重命名的聊天标题栏 -->
@@ -82,13 +85,32 @@ const titleInput = ref<HTMLInputElement | null>(null);
 const editingTop = ref(false);
 const topDraft = ref("");
 const topInput = ref<HTMLInputElement | null>(null);
+const sizer = ref<HTMLElement | null>(null);
+const inputWidth = ref("auto");
 let skipTopBlur = false;
+
+/** 编辑框宽度 = 镜像元素（同字体、同内边距、无边框）的宽度，与胶囊逐像素一致 */
+function updateInputWidth() {
+  nextTick(() => {
+    const el = sizer.value;
+    if (el) {
+      inputWidth.value = `${Math.ceil(el.offsetWidth)}px`;
+    }
+  });
+}
+
+watch(topDraft, () => {
+  if (editingTop.value) {
+    updateInputWidth();
+  }
+});
 
 function startTopEdit() {
   const current = conversations.current;
   if (!current) return;
   topDraft.value = current.title ?? "";
   editingTop.value = true;
+  updateInputWidth();
   nextTick(() => {
     topInput.value?.focus();
     topInput.value?.select();

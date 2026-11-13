@@ -37,6 +37,11 @@ public class TurnTools {
     private final List<MessagePayload.LinkPayload> links = new ArrayList<>();
     private final List<MessagePayload.RefPayload> refs = new ArrayList<>();
 
+    /** 本轮是不是复盘：模型调用过 listAssets / assetStats 时置位，落库时据此标记日记来源 */
+    private boolean review;
+    private String reviewFrom;
+    private String reviewTo;
+
     public TurnTools(List<RecallHit> hits) {
         Set<Long> diaries = new LinkedHashSet<>();
         Set<Long> experiences = new LinkedHashSet<>();
@@ -171,6 +176,8 @@ public class TurnTools {
         if (rows == null) {
             return;
         }
+        // 只要调用了按时间取数的工具，就认定这轮是复盘（无论结果是否为空）
+        review = true;
         for (AssetQueryTools.Row row : rows) {
             String type = row.kind();
             if (!"diary".equals(type) && !"experience".equals(type) && !"knowledge".equals(type)) {
@@ -207,10 +214,17 @@ public class TurnTools {
         if (!links.isEmpty()) {
             return TurnSanitizer.ASSOCIATION;
         }
+        if (review) {
+            return TurnSanitizer.REVIEW;
+        }
         if (!refs.isEmpty()) {
             return TurnSanitizer.RECALL;
         }
         return TurnSanitizer.INTERVIEW;
+    }
+
+    public boolean isReview() {
+        return review;
     }
 
     public void apply(MessagePayload payload) {

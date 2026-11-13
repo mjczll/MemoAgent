@@ -11,9 +11,16 @@ export interface DiaryPage<T> {
 export interface DiaryQuery {
   keyword?: string;
   kind?: string;
+  origin?: string;
+  tag?: string;
   sort?: "asc" | "desc";
   page?: number;
   size?: number;
+}
+
+export interface TagCount {
+  name: string;
+  count: number;
 }
 
 export interface DiaryPayload {
@@ -62,7 +69,7 @@ export function toDiary(dto: DiaryDto): Diary {
     knowledgeIds,
     experienceCount: dto.experienceCount ?? experienceIds.length,
     knowledgeCount: dto.knowledgeCount ?? knowledgeIds.length,
-    origin: dto.origin === "interview" ? "interview" : "manual",
+    origin: dto.origin === "interview" ? "interview" : dto.origin === "review" ? "review" : "manual",
     createdAt: dto.createdAt,
   };
 }
@@ -71,6 +78,8 @@ export function listDiaries(query: DiaryQuery = {}): Promise<DiaryPage<Diary>> {
   const params = new URLSearchParams();
   if (query.keyword?.trim()) params.set("keyword", query.keyword.trim());
   if (query.kind && query.kind !== "all") params.set("kind", query.kind);
+  if (query.origin && query.origin !== "all") params.set("origin", query.origin);
+  if (query.tag && query.tag !== "all") params.set("tag", query.tag);
   if (query.sort) params.set("sort", query.sort);
   params.set("page", String(query.page ?? 1));
   params.set("size", String(query.size ?? 100));
@@ -80,6 +89,10 @@ export function listDiaries(query: DiaryQuery = {}): Promise<DiaryPage<Diary>> {
     page: page.page,
     size: page.size,
   }));
+}
+
+export function listDiaryTags(): Promise<TagCount[]> {
+  return request<TagCount[]>("/api/diaries/tags");
 }
 
 export function getDiary(id: string): Promise<Diary> {

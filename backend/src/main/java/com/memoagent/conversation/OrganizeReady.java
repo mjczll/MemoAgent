@@ -28,6 +28,11 @@ public final class OrganizeReady {
         if (explicit(latest(userTexts))) {
             return true;
         }
+        // 复盘：助手已经调过取数工具、正文也写出来了，放行「整理」按钮。
+        // 不能套 storyReady——复盘对话里用户只问了一句「这个月做了什么」，字数不达标。
+        if (TurnSanitizer.REVIEW.equals(kind)) {
+            return true;
+        }
         if (TurnSanitizer.SUPPLEMENT.equals(kind) || TurnSanitizer.RECALL.equals(kind)) {
             return false;
         }

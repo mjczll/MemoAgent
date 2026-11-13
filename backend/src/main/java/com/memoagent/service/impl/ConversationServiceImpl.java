@@ -309,12 +309,15 @@ public class ConversationServiceImpl implements ConversationService {
     @Transactional
     public ConversationDetailVO draft(Long id) {
         Conversation conversation = requireOpen(id);
+        if (!conversationModel.available()) {
+            throw BusinessException.badRequest("请先配置模型，再整理草稿");
+        }
+        if (isReview(conversation.getId())) {
+            return draftReview(conversation);
+        }
         List<String> userLines = userLines(conversation.getId());
         if (userLines.isEmpty()) {
             throw BusinessException.badRequest("还没有可以整理的内容");
-        }
-        if (!conversationModel.available()) {
-            throw BusinessException.badRequest("请先配置模型，再整理草稿");
         }
         List<String> storyLines = DraftSanitizer.storyLines(userLines);
         String prompt = draftPrompt(storyLines);
@@ -335,6 +338,27 @@ public class ConversationServiceImpl implements ConversationService {
         return detail(conversation);
     }
 
+    /** 复盘草稿：素材是助手的复盘正文 + 用户那句提问，不产经验/知识候选。 */
+    private ConversationDetailVO draftReview(Conversation conversation) {
+        String reviewText = reviewText(conversation.getId());
+        if (!StringUtils.hasText(reviewText)) {
+            throw BusinessException.badRequest("还没有可以整理的复盘内容");
+        }
+        String prompt = reviewPrompt(reviewText);
+        DraftReply reply;
+        try {
+            reply = conversationModel.draftReview(prompt);
+        } catch (RuntimeException exception) {
+            log.warn("Review draft generation failed", exception);
+            throw BusinessException.badRequest("复盘草稿没有生成，请再试一次");
+        }
+        StoredDraft draft = DraftSanitizer.sanitizeReview(reply, reviewText);
+        conversation.setDraftJson(writeJson(draft));
+        conversation.setStatus(DRAFTED);
+        touch(conversation);
+        return detail(conversation);
+    }
+
     @Override
     @Transactional
     public CommitResult commit(Long id, ConversationCommitRequest request) {
@@ -348,9 +372,11 @@ public class ConversationServiceImpl implements ConversationService {
         }
         applyEdits(draft, request);
         List<ConversationMessage> messages = messages(conversation.getId());
-        CommitResult result = draft.isIncident()
-                ? commitIncident(draft, messages, request)
-                : commitSupplements(messages, request);
+        CommitResult result = draft.isReview()
+                ? commitReview(draft)
+                : draft.isIncident()
+                        ? commitIncident(draft, messages, request)
+                        : commitSupplements(messages, request);
         conversation.setDraftJson(writeJson(draft));
         conversation.setResultJson(writeJson(result));
         conversation.setCommittedDiaryId(result.getDiaryId());
@@ -502,8 +528,26 @@ public class ConversationServiceImpl implements ConversationService {
         }
     }
 
-    private CommitResult commitIncident(StoredDraft draft, List<ConversationMessage> messages, ConversationCommitRequest request) {
+    /** 复盘落库：只写一篇日记（origin=review），不产经验、不产知识。 */
+    private CommitResult commitReview(StoredDraft draft) {
         if (!StringUtils.hasText(draft.getTitle()) || !StringUtils.hasText(draft.getContent())) {
+            throw BusinessException.badRequest("复盘标题和正文不能为空");
+        }
+        DiaryCreateRequest diaryRequest = new DiaryCreateRequest();
+        diaryRequest.setTitle(Texts.truncate(draft.getTitle(), 200));
+        diaryRequest.setContent(draft.getContent());
+        diaryRequest.setSummary(Texts.truncate(draft.getSummary(), 500));
+        diaryRequest.setDate(draftDate(draft));
+        diaryRequest.setKind("记录");
+        diaryRequest.setOrigin(DiaryOrigins.REVIEW);
+        diaryRequest.setTags(draft.getTags());
+        DiaryDetailVO diary = diaryService.create(diaryRequest);
+        CommitResult result = new CommitResult();
+        result.setDiaryId(diary.getId());
+        return result;
+    }
+
+    private CommitResult commitIncident(StoredDraft draft, List<ConversationMessage> messages, ConversationCommitRequest request) {        if (!StringUtils.hasText(draft.getTitle()) || !StringUtils.hasText(draft.getContent())) {
             throw BusinessException.badRequest("日记标题和正文不能为空");
         }
         DiaryCreateRequest diaryRequest = new DiaryCreateRequest();
@@ -737,6 +781,34 @@ public class ConversationServiceImpl implements ConversationService {
             prompt.append(i + 1).append(". ").append(userLines.get(i)).append("\n");
         }
         return prompt.toString();
+    }
+
+    /** 这场对话是否进行过复盘（存在 kind=review 的助手消息）。 */
+    private boolean isReview(Long conversationId) {
+        List<ConversationMessage> history = messages(conversationId);
+        for (ConversationMessage message : history) {
+            if (ASSISTANT.equals(message.getRole()) && TurnSanitizer.REVIEW.equals(message.getKind())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** 复盘草稿的素材：最后一条 review 助手消息的正文（模型已写好的复盘汇总）。 */
+    private String reviewText(Long conversationId) {
+        List<ConversationMessage> history = messages(conversationId);
+        for (int index = history.size() - 1; index >= 0; index -= 1) {
+            ConversationMessage message = history.get(index);
+            if (ASSISTANT.equals(message.getRole()) && TurnSanitizer.REVIEW.equals(message.getKind())
+                    && StringUtils.hasText(message.getText())) {
+                return message.getText();
+            }
+        }
+        return null;
+    }
+
+    private String reviewPrompt(String reviewText) {
+        return "复盘内容：\n" + reviewText;
     }
 
     /** 知识候选判定失败只丢候选，不影响草稿本身。 */
