@@ -70,11 +70,6 @@
                 </span>
               </div>
             </div>
-
-            <!-- 清单覆盖小字：只在模型调用过 listAssets 的回复下出现 -->
-            <div v-if="message.payload?.listingHits != null" class="listing-note">
-              命中 {{ message.payload.listingHits }} 条 · 列出 {{ message.payload.listingListed }} 条
-            </div>
           </ChatMessage>
         </template>
 
@@ -560,15 +555,6 @@ onBeforeUnmount(() => window.removeEventListener("resize", resizeComposer));
 </script>
 
 <style scoped>
-/* 清单覆盖小字：虚线与正文隔开，字号比 meta 更小一级 */
-.listing-note {
-  margin-top: 6px;
-  padding-top: 6px;
-  border-top: 1px dashed var(--line);
-  color: var(--faint);
-  font-size: 11.5px;
-}
-
 /* 标题已上移到顶栏（AppTopbar），内容区从顶栏下沿直接开始 */
 .thread-dock {
   display: flex;
