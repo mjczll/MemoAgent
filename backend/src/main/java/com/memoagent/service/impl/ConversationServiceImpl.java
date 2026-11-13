@@ -373,7 +373,7 @@ public class ConversationServiceImpl implements ConversationService {
         applyEdits(draft, request);
         List<ConversationMessage> messages = messages(conversation.getId());
         CommitResult result = draft.isReview()
-                ? commitReview(draft)
+                ? commitReview(draft, messages, request)
                 : draft.isIncident()
                         ? commitIncident(draft, messages, request)
                         : commitSupplements(messages, request);
@@ -528,8 +528,11 @@ public class ConversationServiceImpl implements ConversationService {
         }
     }
 
-    /** 复盘落库：只写一篇日记（origin=review），不产经验、不产知识。 */
-    private CommitResult commitReview(StoredDraft draft) {
+    /**
+     * 复盘落库：一篇 origin=review 的日记 + 一张经验卡，字段结构与采访整理一致。
+     * 知识不自动产生——复盘对话里没有用户点过同意的补充，知识数保持 0。
+     */
+    private CommitResult commitReview(StoredDraft draft, List<ConversationMessage> messages, ConversationCommitRequest request) {
         if (!StringUtils.hasText(draft.getTitle()) || !StringUtils.hasText(draft.getContent())) {
             throw BusinessException.badRequest("复盘标题和正文不能为空");
         }
@@ -542,8 +545,25 @@ public class ConversationServiceImpl implements ConversationService {
         diaryRequest.setOrigin(DiaryOrigins.REVIEW);
         diaryRequest.setTags(draft.getTags());
         DiaryDetailVO diary = diaryService.create(diaryRequest);
+
+        ExperienceCreateRequest experienceRequest = new ExperienceCreateRequest();
+        experienceRequest.setDiaryId(diary.getId());
+        experienceRequest.setTitle(Texts.truncate(draft.getTitle() + " —— 复盘提炼", 200));
+        experienceRequest.setProblem(blankToPending(draft.getProblem()));
+        experienceRequest.setCause(blankToPending(draft.getCause()));
+        experienceRequest.setSolution(blankToPending(draft.getSolution()));
+        experienceRequest.setLesson(blankToPending(draft.getLesson()));
+        experienceRequest.setDomain(draft.getDomain());
+        experienceRequest.setTags(draft.getTags());
+        experienceRequest.setKnowledgeIds(mergedIds(acceptedKnowledgeIds(messages), request == null ? null : request.getKnowledgeIds()));
+        experienceRequest.setNewKnowledge(mergedKnowledge(acceptedSupplements(messages), request));
+        ExperienceDetailVO experience = experienceService.create(experienceRequest);
+        experienceService.attachToDiary(diary.getId(), request == null ? null : request.getExperienceIds());
+
         CommitResult result = new CommitResult();
         result.setDiaryId(diary.getId());
+        result.setExperienceId(experience.getId());
+        result.setKnowledgeIds(experience.getKnowledgeIds());
         return result;
     }
 

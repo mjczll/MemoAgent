@@ -74,29 +74,31 @@ public final class DraftSanitizer {
     }
 
     /**
-     * 复盘草稿：素材是助手写好的复盘正文，落成一篇 origin=review 的日记。
-     * 只填标题/摘要/正文/类型/标签，经验四件套与领域留空，不产知识候选。
+     * 复盘草稿：素材是助手写好的复盘正文，落成 origin=review 的日记 + 一张经验。
+     * 字段结构与采访整理一致（四件套必须出现，草稿页才会显示同样的面板），
+     * 但不产知识候选——复盘是二次概括，不能直接进知识库。
      */
     public static StoredDraft sanitizeReview(DraftReply reply, String reviewText) {
         DraftReply source = reply == null ? new DraftReply() : reply;
         String fallback = reviewText == null ? "" : reviewText;
         StoredDraft draft = new StoredDraft();
+        // 草稿页按 incident 显示「经验四件套 + 相关记录」面板；commit 时 review 分支优先，不会误走采访提交
         draft.setReview(true);
-        draft.setIncident(false);
+        draft.setIncident(true);
         draft.setDate(LocalDate.now().toString());
         draft.setTitle(firstText(omitCommands(source.getTitle()), Texts.truncate(fallback, 24)));
         draft.setKind("记录");
-        draft.setDomain("");
+        draft.setDomain(Texts.truncate(omitCommands(source.getDomain()), 64));
         draft.setTags(cleanTags(source.getTags(), ""));
         if (!draft.getTags().contains("复盘")) {
             draft.getTags().add("复盘");
         }
         draft.setSummary(firstText(omitCommands(source.getSummary()), Texts.truncate(fallback, 60)));
         draft.setContent(firstText(omitCommands(source.getContent()), fallback));
-        draft.setProblem("");
-        draft.setCause("");
-        draft.setSolution("");
-        draft.setLesson("");
+        draft.setProblem(firstText(omitCommands(source.getProblem()), "待补充"));
+        draft.setCause(firstText(omitCommands(source.getCause()), "待补充"));
+        draft.setSolution(firstText(omitCommands(source.getSolution()), "待补充"));
+        draft.setLesson(firstText(omitCommands(source.getLesson()), "待补充"));
         return draft;
     }
 

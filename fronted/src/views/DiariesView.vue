@@ -63,11 +63,10 @@
           class="list-row"
           @click="router.push(`/diaries/${item.id}`)"
         >
+          <span class="tag accent origin-corner">{{ originLabel(item.origin) }}</span>
           <div class="title">
             <b>{{ item.title }}</b>
             <span class="badge">{{ item.kind }}</span>
-            <span v-if="item.origin === 'interview'" class="tag accent">采访生成</span>
-            <span v-else-if="item.origin === 'review'" class="tag">复盘</span>
           </div>
           <div class="meta">
             <span>{{ item.date }}</span>
@@ -196,6 +195,13 @@ function onFilterChange() {
   writeRoute();
 }
 
+/** 三种来源统一显示成与「采访生成」一致的高亮徽标 */
+function originLabel(origin: string) {
+  if (origin === "interview") return "采访生成";
+  if (origin === "review") return "复盘";
+  return "用户编写";
+}
+
 async function loadTags() {
   try {
     tagCounts.value = await listDiaryTags();
@@ -221,3 +227,30 @@ watch(
   },
 );
 </script>
+
+<style scoped>
+/* 来源徽标钉在每条日记的右上角 */
+.list-row {
+  position: relative;
+}
+
+.origin-corner {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  white-space: nowrap;
+}
+
+/* 标题给右上角徽标让位；类型徽标紧跟标题文字，长标题时才省略 */
+.list-row .title {
+  padding-right: 88px;
+}
+
+.list-row .title b {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+</style>
