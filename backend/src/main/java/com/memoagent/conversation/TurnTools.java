@@ -42,6 +42,10 @@ public class TurnTools {
     private String reviewFrom;
     private String reviewTo;
 
+    /** 本轮 listAssets 的覆盖累计：命中多少条、实际列出多少条（多次调用累加）。 */
+    private int listingHits;
+    private int listingListed;
+
     public TurnTools(List<RecallHit> hits) {
         Set<Long> diaries = new LinkedHashSet<>();
         Set<Long> experiences = new LinkedHashSet<>();
@@ -227,10 +231,20 @@ public class TurnTools {
         return review;
     }
 
+    /** 多次 listAssets 时累加，给前端的小字用。 */
+    public void markListing(int hits, int listed) {
+        this.listingHits += hits;
+        this.listingListed += listed;
+    }
+
     public void apply(MessagePayload payload) {
         payload.setSupplement(supplement);
         payload.setLinks(List.copyOf(links));
         payload.setRefs(List.copyOf(refs));
+        if (listingHits > 0) {
+            payload.setListingHits(listingHits);
+            payload.setListingListed(listingListed);
+        }
     }
 
     int addLinks(List<Long> requested) {

@@ -37,6 +37,10 @@ public class TurnAssetTools {
         AssetQueryTools.Listing listing = queries.listing(from, to, kinds, limit);
         // 同一批记录登记成引用，页面才会出现「搜索到 N 条相关引用」
         turn.citeListing(listing.rows());
+        // 记录覆盖情况，前端在回复下方用小字显示「命中 X 条，列出 Y 条」
+        if (!listing.rows().isEmpty()) {
+            turn.markListing(listing.rows().size(), listing.listed());
+        }
         return listing.text();
     }
 

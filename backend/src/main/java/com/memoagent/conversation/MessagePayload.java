@@ -22,6 +22,11 @@ public class MessagePayload {
 
     private List<LinkPayload> links = new ArrayList<>();
 
+    /** 本轮 listAssets 的覆盖情况：命中多少条、清单里实际列出多少条。未调用过则为 null，前端据此决定是否显示小字。 */
+    private Integer listingHits;
+
+    private Integer listingListed;
+
     @Data
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class SupplementPayload {

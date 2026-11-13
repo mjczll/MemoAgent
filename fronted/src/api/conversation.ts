@@ -30,12 +30,15 @@ export interface ConversationPayload {
   supplement?: ConversationSupplement | null;
   refs?: ConversationRef[];
   links?: ConversationLink[];
+  /** 本轮 listAssets 的覆盖情况：命中多少条、清单实际列出多少条。没调用过则没有这个字段。 */
+  listingHits?: number | null;
+  listingListed?: number | null;
 }
 
 export interface ConversationMessage {
   id: number;
   role: "user" | "assistant";
-  kind: "interview" | "recall" | "supplement" | "association";
+  kind: "interview" | "recall" | "supplement" | "association" | "review";
   text: string;
   payload?: ConversationPayload | null;
   createdAt: string;

@@ -57,10 +57,11 @@ public class AssetQueryTools {
     /** 上限。模型可以要更多，但不允许无限拉。 */
     private static final int MAX_LIMIT = 20;
 
-    /** 按时间列清单的默认与上限，复盘要看得全，比语义检索给得多。 */
-    private static final int DEFAULT_LIST_LIMIT = 30;
+    /** 按时间列清单的条数上限。只是防止模型无限拉的保险丝，实际截断由文本预算决定。 */
+    private static final int MAX_LIST_LIMIT = 200;
 
-    private static final int MAX_LIST_LIMIT = 60;
+    /** 清单的文本预算（字符数）。到预算才截断，而不是按条数——摘要短的月份能列更多条。 */
+    private static final int MAX_TEXT_CHARS = 10_000;
 
     /** 没给日期时的默认窗口：最近 30 天。 */
     private static final int DEFAULT_WINDOW_DAYS = 30;
@@ -122,19 +123,20 @@ public class AssetQueryTools {
             name = "listAssets",
             description = """
                     按日期范围列出用户这段时间写过的日记、经验和知识，按时间倒序，不走向量检索、\
-                    结果覆盖该范围内的全部记录。用户问「这个月我都做了什么」「最近两周干了什么」\
-                    「上个月有哪些记录」这类按时间回顾的问题时调用，不要用 searchAssets 代替。\
-                    日期格式必须是 yyyy-MM-dd，包含首尾两天。""")
+                    结果默认覆盖该范围内的全部记录（受上下文预算限制，极端密集的区间会提示未列出，\
+                    此时把区间拆成更小的范围再调用即可补全）。用户问「这个月我都做了什么」\
+                    「最近两周干了什么」「上个月有哪些记录」这类按时间回顾的问题时调用，\
+                    不要用 searchAssets 代替。日期格式必须是 yyyy-MM-dd，包含首尾两天。""")
     public String listAssets(
             @ToolParam(description = "起始日期，格式 yyyy-MM-dd，含当天", required = false) String from,
             @ToolParam(description = "结束日期，格式 yyyy-MM-dd，含当天；不填表示今天", required = false) String to,
             @ToolParam(description = "限定类型：diary、experience、knowledge，多个用逗号分隔；不填表示全部", required = false) String kinds,
-            @ToolParam(description = "返回条数，默认 30，最多 60", required = false) Integer limit) {
+            @ToolParam(description = "最多返回的条数；不填表示尽量列全，由文本预算决定实际条数", required = false) Integer limit) {
         return listing(from, to, kinds, limit).text();
     }
 
-    /** 清单结果。文本给模型看，记录本身给 {@link TurnAssetTools} 挂引用用。 */
-    record Listing(String text, List<Row> rows) {
+    /** 清单结果。文本给模型看，记录本身给 {@link TurnAssetTools} 挂引用用；listed 是文本里实际列出的条数。 */
+    record Listing(String text, List<Row> rows, int listed) {
     }
 
     /**
@@ -150,43 +152,48 @@ public class AssetQueryTools {
             end = parseDate(to, LocalDate.now());
             start = parseDate(from, end.minusDays(DEFAULT_WINDOW_DAYS - 1L));
         } catch (DateTimeParseException exception) {
-            return new Listing("日期格式不对，请用 yyyy-MM-dd，例如 2026-11-01。", List.of());
+            return new Listing("日期格式不对，请用 yyyy-MM-dd，例如 2026-11-01。", List.of(), 0);
         }
         if (start.isAfter(end)) {
             LocalDate swap = start;
             start = end;
             end = swap;
         }
-        int size = limit == null ? DEFAULT_LIST_LIMIT : Math.max(1, Math.min(limit, MAX_LIST_LIMIT));
+        int size = limit == null ? MAX_LIST_LIMIT : Math.max(1, Math.min(limit, MAX_LIST_LIMIT));
         List<Row> rows = query(start, end, parseKinds(kinds));
         if (rows.isEmpty()) {
-            return new Listing(range(start, end) + " 这段时间没有记录。", List.of());
+            return new Listing(range(start, end) + " 这段时间没有记录。", List.of(), 0);
         }
         StringBuilder text = new StringBuilder();
-        text.append(range(start, end)).append(" 共 ").append(rows.size()).append(" 条");
-        if (rows.size() > size) {
-            text.append("（先列最近 ").append(size).append(" 条）");
-        }
-        text.append("：\n");
+        text.append(range(start, end)).append(" 共 ").append(rows.size()).append(" 条：\n");
         int order = 1;
+        int listed = 0;
+        int budget = MAX_TEXT_CHARS;
         for (Row row : rows) {
             if (order > size) {
                 break;
             }
-            text.append(order).append(". [").append(label(row.kind()))
-                    .append(" ").append(row.date()).append(" #").append(row.id()).append("] ")
-                    .append(row.title());
+            String line = order + ". [" + label(row.kind()) + " " + row.date() + " #" + row.id() + "] "
+                    + row.title();
             if (StringUtils.hasText(row.excerpt())) {
-                text.append("｜").append(row.excerpt());
+                line += "｜" + row.excerpt();
             }
-            text.append("\n");
+            // 预算按整行判断；第一条总是列出，保证至少能看到最近一条
+            if (listed > 0 && line.length() + 1 > budget) {
+                break;
+            }
+            text.append(line).append("\n");
+            budget -= line.length() + 1;
             order += 1;
+            listed += 1;
         }
-        if (rows.size() > size) {
-            text.append("（还有 ").append(rows.size() - size).append(" 条没列出）\n");
+        if (listed < rows.size()) {
+            // 给模型的拆分提示（方案 B）：拆出更小的区间再调用，即可补全其余记录
+            text.append("（还有 ").append(rows.size() - listed)
+                    .append(" 条没列出；把日期区间拆成更小的范围（例如按周）再调用本工具，可以补全其余记录）\n");
         }
-        log.info("模型按时间列清单 {} ~ {}，命中 {} 条", start, end, rows.size());
-        return new Listing(text.toString(), rows);
+        log.info("模型按时间列清单 {} ~ {}，命中 {} 条，列出 {} 条", start, end, rows.size(), listed);
+        return new Listing(text.toString(), rows, listed);
     }
 
     @Tool(
