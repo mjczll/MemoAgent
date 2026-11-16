@@ -7,7 +7,6 @@
           日记、经验、知识已接入后端；个人资料仍保存在浏览器本地。
         </p>
       </div>
-      <span class="badge">日记已联调</span>
     </div>
 
     <div class="split left-wide">
@@ -82,19 +81,6 @@
             <p class="small faint" style="margin: 0">
               「重新加载资产」会从后端再拉一遍日记 / 经验 / 知识。
               「清空本地设置」只清浏览器里的会话和资料，不会删除后端数据。
-            </p>
-          </div>
-        </div>
-
-        <div class="panel">
-          <div class="panel-head"><b>关于这个原型</b></div>
-          <div class="panel-body small" style="color: var(--mute)">
-            <p style="margin: 0 0 8px">
-              MemoAgent · AI 采访式个人经验与知识管理系统。
-            </p>
-            <p style="margin: 0">
-              技术栈：Vue 3 + TypeScript + Vite + Pinia + vue-router；图谱由内联 SVG 绘制；
-              日记 / 经验 / 知识 / 采访对话 / 语义检索均已对接后端。
             </p>
           </div>
         </div>

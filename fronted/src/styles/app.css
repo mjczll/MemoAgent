@@ -1729,6 +1729,29 @@ details.fold .fold-body {
   border-top: 1px solid var(--line);
 }
 
+.modal-confirm {
+  border: none;
+}
+
+.modal-confirm-title {
+  padding: 18px 20px 0;
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+.modal-confirm .modal-body {
+  padding: 8px 20px 4px;
+}
+
+.modal-confirm .modal-foot {
+  border-top: none;
+  padding: 14px 20px 18px;
+}
+
+.modal-foot-end {
+  justify-content: flex-end;
+}
+
 /* ---------- Toast ---------- */
 .toasts {
   position: fixed;

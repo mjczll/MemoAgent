@@ -109,10 +109,10 @@
     </div>
   </Teleport>
 
-  <ModalDialog v-model="deleteOpen" title="删除后，该对话将不可恢复" width="420px">
+  <ModalDialog v-model="deleteOpen" title="删除后，该对话将不可恢复" width="420px" variant="confirm">
     <template #foot>
-      <button class="btn" @click="deleteOpen = false">取消</button>
-      <button class="btn danger" :disabled="busy" @click="confirmDelete">删除对话</button>
+      <button class="btn ghost" @click="deleteOpen = false">取消</button>
+      <button class="btn danger" :disabled="busy" @click="confirmDelete">删除该对话</button>
     </template>
   </ModalDialog>
 </template>

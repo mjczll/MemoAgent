@@ -7,7 +7,7 @@
           {{
             loadError
               ? "后端数据不可用，列表未加载。"
-              : `共 ${library.knowledge.length} 条知识，已掌握 ${stats.mastered} 条（${stats.masteryRate}%），涵盖 ${stats.domains} 个领域。`
+              : `共 ${library.knowledge.length} 条知识，已掌握 ${stats.mastered} 条（${stats.masteryRate}%），涵盖 ${knownDomains.length} 个领域。`
           }}
         </p>
       </div>
