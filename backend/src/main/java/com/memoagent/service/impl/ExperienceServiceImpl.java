@@ -164,6 +164,19 @@ public class ExperienceServiceImpl implements ExperienceService {
     }
 
     @Override
+    public List<String> domainSummary() {
+        return experienceMapper.selectList(Wrappers.<Experience>lambdaQuery()
+                        .eq(Experience::getUserId, CurrentUser.id())
+                        .select(Experience::getDomain))
+                .stream()
+                .map(Experience::getDomain)
+                .filter(StringUtils::hasText)
+                .map(String::trim)
+                .distinct()
+                .toList();
+    }
+
+    @Override
     @Transactional
     public void attachToDiary(Long diaryId, List<Long> experienceIds) {
         if (experienceIds == null || experienceIds.isEmpty()) {

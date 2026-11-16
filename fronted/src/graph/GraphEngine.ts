@@ -11,6 +11,8 @@ import {
   forceLink,
   forceCenter,
   forceCollide,
+  forceX,
+  forceY,
   type SimulationNodeDatum,
   type SimulationLinkDatum,
   type Simulation,
@@ -67,6 +69,9 @@ interface SimNode extends SimulationNodeDatum {
   updatedAt?: string;
   _originX?: number;
   _originY?: number;
+  /** initSim 排布完成时的初始位置（还原节点用） */
+  _homeX?: number;
+  _homeY?: number;
 }
 
 interface SimEdge extends SimulationLinkDatum<SimNode> {
@@ -110,7 +115,7 @@ export class GraphEngine {
   private camTarget = { x: 0, y: 0, zoom: 1 };
   private camAnimating = false;
 
-  private forces: ForcesConfig = { center: 40, repulsion: 20000, attraction: 80, linkLength: 100 };
+  private forces: ForcesConfig = { center: 20, repulsion: 2000, attraction: 80, linkLength: 130 };
   private display: DisplayConfig = { showLabels: true, textOpacity: 0.5, nodeScale: 1, linkWidth: 1 };
 
   private grabbing = false;
@@ -261,21 +266,73 @@ export class GraphEngine {
       node.y = Math.sin(angle) * innerR;
     });
 
-    // 用极弱的力做微调，不让节点飞远
+    // 用极弱的力做微调，不让节点飞远。参数读 this.forces（面板可调），
+    // 不再硬编码——否则 setData 后用户的力度设置会被静默重置。
+    const f = this.forces;
     this.sim = forceSimulation<SimNode, SimEdge>(this.simNodes)
       .force("link", forceLink<SimNode, SimEdge>(this.simEdges)
         .id((d) => d.id)
-        .distance(50)
-        .strength(0.2))
+        .distance(f.linkLength)
+        .strength(f.attraction / 200))
       .force("charge", forceManyBody<SimNode>()
-        .strength(-30)
-        .distanceMax(200))
-      .force("center", forceCenter<SimNode>(0, 0).strength(0.05))
+        .strength(this.chargeStrength(f.repulsion))
+        .distanceMax(this.chargeDistance(f.repulsion)))
+      .force("center", forceCenter<SimNode>(0, 0).strength(f.center / 200))
       .force("collide", forceCollide<SimNode>()
         .radius((d) => d.size * 0.5 + 5))
       .alphaDecay(0.05)
       .velocityDecay(0.8)
       .on("tick", () => {});
+    // 首帧前把模拟同步预跑到平衡态：页面进入即为最终布局，
+    // 去掉「节点从初始环形位逐渐滑向平衡点」的收敛动画。
+    for (let i = 0; i < 150; i++) {
+      this.sim.tick();
+    }
+    this.sim.alpha(0);
+    this.sim.stop();
+    // 定格平衡布局位置：还原节点时以此为基准（_originX 会在拖拽开始时被复用，不可靠）
+    this.simNodes.forEach((n) => {
+      n._homeX = n.x ?? 0;
+      n._homeY = n.y ?? 0;
+    });
+  }
+
+  private restoreTimer?: number;
+
+  /**
+   * 从当前位置平滑飞回初始布局（还原节点 / 生长动画共用）：
+   * forceX/forceY 回位力 + alpha 0.6，约 1.4s 落定后撤力冻结——
+   * 不预跑平衡、不自动适配视图，落点即最终状态。
+   */
+  private flyHome(): void {
+    if (!this.sim) return;
+    if (this.restoreTimer !== undefined) {
+      window.clearTimeout(this.restoreTimer);
+    }
+    this.select(null);
+    this.simNodes.forEach((n) => {
+      n.vx = 0;
+      n.vy = 0;
+      n.fx = null;
+      n.fy = null;
+    });
+    this.sim
+      .force("homeX", forceX<SimNode>((d) => (d as SimNode)._homeX ?? 0).strength(0.25))
+      .force("homeY", forceY<SimNode>((d) => (d as SimNode)._homeY ?? 0).strength(0.25));
+    this.sim.alpha(0.6);
+    this.restoreTimer = window.setTimeout(() => {
+      this.sim?.force("homeX", null);
+      this.sim?.force("homeY", null);
+      this.sim?.alphaTarget(0);
+      this.sim?.alpha(0);
+      this.sim?.stop();
+      this.restoreTimer = undefined;
+    }, 1400);
+  }
+
+  /** 还原节点：从当前位置平滑飞回初始布局并冻结。 */
+  restoreNodes(): void {
+    this.flyHome();
   }
 
   /* ---- PixiJS 节点 ---- */
@@ -308,12 +365,26 @@ export class GraphEngine {
   private tick = (): void => {
     if (this.destroyed) return;
     this.lerpCam();
+    this.stepSim();
     this.drawEdges();
     this.drawNodes();
     this.drawLabels();
     this.drawGlow();
     this.updateWorld();
   };
+
+  /**
+   * 推进 d3 力模拟。之前模拟从未被驱动（ticker 只绘制、on("tick") 为空回调），
+   * 节点永远停在初始环形位置，力度面板的调节完全没有视觉效果。
+   * alpha 低于稳定阈值后跳过推进，避免每帧白算。
+   */
+  private stepSim(): void {
+    if (!this.sim) return;
+    const alpha = this.sim.alpha();
+    const target = this.sim.alphaTarget();
+    if (alpha < this.sim.alphaMin() && target <= this.sim.alphaMin()) return;
+    this.sim.tick();
+  }
 
   private updateWorld(): void {
     this.world.position.set(this.cam.x, this.cam.y);
@@ -476,7 +547,8 @@ export class GraphEngine {
       const t = this.pixiLabels.get(n.id);
       if (!t || n.x == null) continue;
 
-      let vis = show && n.degree >= 2;
+      // 全部节点默认显示标题（用户选择 C）；悬停/拖拽/搜索时另有高亮规则
+      let vis = show;
       let op = baseOp;
       let fw: "400" | "500" | "600" | "700" = "500";
       let fs = 11;
@@ -546,7 +618,7 @@ export class GraphEngine {
     n._originY = n.y ?? 0;
     n.fx = n.x;
     n.fy = n.y;
-    this.sim.alphaTarget(0.1).restart();
+    this.sim.alphaTarget(0.1);
     this.updateCursor();
 
     const onMove = (ev: PointerEvent) => {
@@ -630,7 +702,7 @@ export class GraphEngine {
     this.camAnimating = true;
   }
 
-  fitView(pad = 50): void {
+  fitView(pad = 50, instant = false): void {
     if (!this.simNodes.length) return;
     const w = this.app.screen.width;
     const h = this.app.screen.height;
@@ -651,10 +723,23 @@ export class GraphEngine {
     const gh = (y2 - y1) || 1;
     const z = Math.max(0.1, Math.min((w - pad * 2) / gw, (h - pad * 2) / gh, 2.5));
 
-    this.camTarget.x = cx;
-    this.camTarget.y = cy;
+    // 相机对准节点包围盒中心（而非世界原点）：
+    // 节点被拖离原点后，视口必须跟着包围盒走，否则被拖远的节点留在画面外。
+    // 屏幕点 sx = cam.x + wx * zoom → 让包围盒中心落在屏幕中心：cam = 屏幕中心 - 中心点 * zoom
+    const bcx = (x1 + x2) / 2;
+    const bcy = (y1 + y2) / 2;
+    this.camTarget.x = cx - bcx * z;
+    this.camTarget.y = cy - bcy * z;
     this.camTarget.zoom = z;
-    this.camAnimating = true;
+    if (instant) {
+      // 立即生效：页面进入/数据加载时直接落到适配视角，不播放缩放缓动
+      this.cam.x = this.camTarget.x;
+      this.cam.y = this.camTarget.y;
+      this.cam.zoom = this.camTarget.zoom;
+      this.camAnimating = false;
+    } else {
+      this.camAnimating = true;
+    }
   }
 
   zoomBy(factor: number, cx?: number, cy?: number): void {
@@ -783,16 +868,33 @@ export class GraphEngine {
 
   /* ---- 公共 API ---- */
 
-  setForces(f: ForcesConfig): void {
+  /**
+   * 排斥力映射：
+   * - 强度封顶 4000：更高强度只会让节点在平衡点附近过冲抖动，布局不变差也不更好；
+   * - 作用范围随力度扩展（150 + 力度/25，封顶 1200）：「排斥力更强」体现为推得更开，
+   *   而不是局部更猛——原 distanceMax 硬顶 200，超过一定力度后斥力完全不再起作用。
+   */
+  private chargeStrength(repulsion: number): number {
+    return -Math.min(repulsion, 4000);
+  }
+
+  private chargeDistance(repulsion: number): number {
+    return Math.min(1200, 150 + repulsion / 25);
+  }
+
+  setForces(f: ForcesConfig, alpha = 0.3): void {
     this.forces = f;
     if (!this.sim) return;
     const link = this.sim.force("link") as any;
     if (link) { link.distance(f.linkLength).strength(f.attraction / 200); }
     const charge = this.sim.force("charge") as any;
-    if (charge) charge.strength(-f.repulsion);
+    if (charge) {
+      charge.strength(this.chargeStrength(f.repulsion));
+      charge.distanceMax(this.chargeDistance(f.repulsion));
+    }
     const center = this.sim.force("center") as any;
     if (center) center.strength(f.center / 200);
-    this.sim.alpha(0.3).restart();
+    this.sim.alpha(alpha);
   }
 
   setDisplay(d: DisplayConfig): void {
@@ -800,14 +902,20 @@ export class GraphEngine {
   }
 
   replayGrowth(): void {
+    if (!this.sim) return;
+    if (this.restoreTimer !== undefined) {
+      window.clearTimeout(this.restoreTimer);
+    }
+    // 散开作为生长起点，再走与还原节点完全相同的平滑回位动画
     this.simNodes.forEach((n) => {
       n.x = (Math.random() - 0.5) * 300;
       n.y = (Math.random() - 0.5) * 300;
       n.vx = 0;
       n.vy = 0;
+      n.fx = null;
+      n.fy = null;
     });
-    this.sim.alpha(1).restart();
-    setTimeout(() => this.fitView(), 1200);
+    this.flyHome();
   }
 
   getStats(): { nodes: number; edges: number } {

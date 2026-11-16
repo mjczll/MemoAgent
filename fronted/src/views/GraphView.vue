@@ -73,7 +73,7 @@
                 <div class="legend-row"><span class="ldot" style="background:#7d9bbf" /><span>日记</span></div>
                 <div class="legend-row"><span class="ldot" style="background:#a89bbf" /><span>经验</span></div>
                 <div class="legend-row"><span class="ldot" style="background:#83b3a4" /><span>知识</span></div>
-                <div class="legend-row"><span class="ldot" /><span>节点越大 = 连接越多</span></div>
+                <div class="legend-row"><span class="ldot" style="background:#cfcfcf" /><span>领域</span></div>
               </div>
             </div>
           </template>
@@ -128,8 +128,8 @@
     <div class="zoom-float">
       <button class="zbtn" title="缩小" @click="zoomBy(0.85)">－</button>
       <button class="zbtn" title="放大" @click="zoomBy(1.18)">＋</button>
+      <button class="zbtn" title="还原节点" @click="restoreNodes">⟲</button>
       <button class="zbtn" title="适配全图" @click="() => fitView()">⊡</button>
-      <button class="zbtn" title="重新中心" @click="recenter">↺</button>
     </div>
 
     <!-- 状态栏 -->
@@ -177,7 +177,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from "vue";
+import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useGraphEngine } from "@/composables/useGraphEngine";
 import { fetchGraph, fetchLocalGraph } from "@/api/graph";
@@ -200,8 +200,13 @@ const localType = computed(() => {
 });
 const localDepth = ref(Number(route.query.depth) ?? 2);
 
-const SETTINGS_KEY = "memoagent:graph-settings";
-const DEFAULT_FORCES: ForcesConfig = { center: 40, repulsion: 30, attraction: 80, linkLength: 50 };
+// v2：力度模拟真正运行后，旧键下保存的力度值（滑块无效时期盲调的）会产生极差布局，作废重置
+const SETTINGS_KEY = "memoagent:graph-settings:v2";
+// 默认力度按「模拟真实运行」标定：
+// center 20 → forceCenter strength 0.1（d3 常规值，聚而不挤）；
+// repulsion 2000 → charge -2000，配合 distanceMax 200 提供局部扩散；
+// attraction 80 → link strength 0.4；linkLength 130 保证节点间距大于节点半径。
+const DEFAULT_FORCES: ForcesConfig = { center: 20, repulsion: 2000, attraction: 80, linkLength: 130 };
 const DEFAULT_DISPLAY: DisplayConfig = { showLabels: true, textOpacity: 0.85, nodeScale: 1, linkWidth: 1 };
 
 interface GraphSettings {
@@ -249,7 +254,7 @@ const display = reactive<DisplayConfig>({ ...DEFAULT_DISPLAY, ...(savedSettings?
 
 /* ---- Engine ---- */
 const canvasHost = ref<HTMLElement | null>(null);
-const { liveStats, mount, setData, setForces, setDisplay, select, search, fitView, zoomBy, replayGrowth, getSelectedNode } = useGraphEngine();
+const { liveStats, mount, setData, setForces, setDisplay, select, restoreNodes, search, fitView, zoomBy, replayGrowth, getSelectedNode } = useGraphEngine();
 
 /* ---- 数据 ---- */
 const EMPTY_GRAPH: GraphData = { nodes: [], edges: [] };
@@ -386,10 +391,6 @@ function buildInput(): { nodes: GraphNodeInput[]; edges: GraphEdgeInput[] } {
   };
 }
 
-function recenter() {
-  select(null);
-  fitView();
-}
 
 function reloadLocal() {
   const d = buildInput();
@@ -419,6 +420,9 @@ function resetSettings() {
   edgeFilter.value = [];
   Object.assign(forces, DEFAULT_FORCES);
   Object.assign(display, DEFAULT_DISPLAY);
+  // 显式用较强的 alpha 播放重排动画（forces 的 deep watch 也会触发一次 0.3 的轻动画，
+  // nextTick 保证本次 0.6 在其后执行并覆盖）
+  nextTick(() => setForces({ ...DEFAULT_FORCES }, 0.6));
 }
 
 /* ---- Watches ---- */
@@ -430,7 +434,7 @@ watch(currentSettings, (value) => {
 watch(colorGroups, () => { const d = buildInput(); setData(d.nodes, d.edges); setTimeout(() => fitView(), 300); });
 watch([typeFilter, orphansOnly, edgeFilter], () => { const d = buildInput(); setData(d.nodes, d.edges); setTimeout(() => fitView(), 300); });
 watch(searchQuery, (q) => search(q));
-watch(graphData, () => { const d = buildInput(); setData(d.nodes, d.edges); setTimeout(() => fitView(), 300); });
+watch(graphData, () => { const d = buildInput(); setData(d.nodes, d.edges); setTimeout(() => fitView(50, true), 300); });
 watch([isLocal, localId, localDepth, domain], () => { void loadGraph(); });
 
 /* ---- Mount ---- */
@@ -446,10 +450,10 @@ onMounted(async () => {
   search(searchQuery.value);
   const d = buildInput();
   setData(d.nodes, d.edges);
-  // 初始几次 fitView 让图居中
-  fitView();
-  setTimeout(() => fitView(), 500);
-  setTimeout(() => fitView(), 1000);
+  // 初始几次 fitView 让图居中：全部瞬时生效，不播放「节点缩到正常大小」的动画
+  fitView(50, true);
+  setTimeout(() => fitView(50, true), 500);
+  setTimeout(() => fitView(50, true), 1000);
 });
 </script>
 

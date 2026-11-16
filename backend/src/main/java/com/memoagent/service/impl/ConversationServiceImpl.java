@@ -716,6 +716,9 @@ public class ConversationServiceImpl implements ConversationService {
         if (request.getContent() != null) {
             draft.setContent(request.getContent());
         }
+        if (request.getDomain() != null) {
+            draft.setDomain(request.getDomain().trim());
+        }
         if (request.getTags() != null) {
             draft.setTags(Texts.normalizeTags(request.getTags()));
         }
@@ -773,7 +776,36 @@ public class ConversationServiceImpl implements ConversationService {
                 order += 1;
             }
         }
+        appendDomainReuse(prompt);
         return prompt.toString();
+    }
+
+    /**
+     * 把已有领域列表写进提示词，供领域复用（职责归经验：模型只在整理/补充时判断一次领域，
+     * 优先复用已有名字，防止同一主题出现多个领域名导致聚合发散）。
+     */
+    private void appendDomainReuse(StringBuilder prompt) {
+        List<String> domains = existingDomains();
+        if (domains.isEmpty()) {
+            return;
+        }
+        prompt.append("已有领域：").append(String.join("、", domains)).append("\n");
+    }
+
+    /** 经验 + 知识的领域并集，保序去重，最多 20 个。 */
+    private List<String> existingDomains() {
+        Set<String> domains = new LinkedHashSet<>();
+        for (String domain : experienceService.domainSummary()) {
+            if (StringUtils.hasText(domain)) {
+                domains.add(domain.trim());
+            }
+        }
+        for (String domain : knowledgeService.domainSummary()) {
+            if (StringUtils.hasText(domain)) {
+                domains.add(domain.trim());
+            }
+        }
+        return domains.stream().limit(20).toList();
     }
 
     private String typeLabel(String type) {
@@ -794,6 +826,7 @@ public class ConversationServiceImpl implements ConversationService {
         for (int i = 0; i < userLines.size(); i += 1) {
             prompt.append(i + 1).append(". ").append(userLines.get(i)).append("\n");
         }
+        appendDomainReuse(prompt);
         return prompt.toString();
     }
 
@@ -822,7 +855,9 @@ public class ConversationServiceImpl implements ConversationService {
     }
 
     private String reviewPrompt(String reviewText) {
-        return "复盘内容：\n" + reviewText;
+        StringBuilder prompt = new StringBuilder("复盘内容：\n").append(reviewText).append("\n");
+        appendDomainReuse(prompt);
+        return prompt.toString();
     }
 
     /** 知识候选判定失败只丢候选，不影响草稿本身。 */

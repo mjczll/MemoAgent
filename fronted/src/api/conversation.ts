@@ -302,6 +302,7 @@ export function commitConversation(
     date?: string;
     summary?: string;
     content?: string;
+    domain?: string;
     tags?: string[];
     problem?: string;
     cause?: string;

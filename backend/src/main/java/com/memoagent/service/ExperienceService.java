@@ -20,4 +20,7 @@ public interface ExperienceService {
     ExperienceDetailVO update(Long id, ExperienceUpdateRequest request);
 
     void attachToDiary(Long diaryId, List<Long> experienceIds);
+
+    /** 当前用户用过的领域名去重列表（非空），供领域复用提示与草稿页下拉。 */
+    List<String> domainSummary();
 }

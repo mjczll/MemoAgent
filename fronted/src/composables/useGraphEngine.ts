@@ -39,8 +39,8 @@ export function useGraphEngine(opts: UseGraphEngineOptions = {}) {
     engine.value?.setData(nodes, edges);
   }
 
-  function setForces(f: ForcesConfig): void {
-    engine.value?.setForces(f);
+  function setForces(f: ForcesConfig, alpha = 0.3): void {
+    engine.value?.setForces(f, alpha);
   }
 
   function setDisplay(d: DisplayConfig): void {
@@ -50,6 +50,11 @@ export function useGraphEngine(opts: UseGraphEngineOptions = {}) {
   function select(id: string | null): void {
     engine.value?.select(id);
   }
+
+  function restoreNodes(): void {
+    engine.value?.restoreNodes();
+  }
+
 
   function search(q: string): void {
     engine.value?.search(q);
@@ -85,6 +90,7 @@ export function useGraphEngine(opts: UseGraphEngineOptions = {}) {
     setForces,
     setDisplay,
     select,
+    restoreNodes,
     search,
     fitView,
     zoomBy,

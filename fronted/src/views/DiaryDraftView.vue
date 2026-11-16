@@ -47,6 +47,17 @@
               <input v-model="draft.date" type="date" class="input" />
             </div>
             <div class="field">
+              <label>领域</label>
+              <SuggestCombo
+                :model-value="domainValue"
+                :options="domainOptions"
+                :maxlength="64"
+                placeholder="选择已有领域，或输入新领域"
+                aria-label="选择领域"
+                @update:model-value="onDomainChange"
+              />
+            </div>
+            <div class="field">
               <label>标签（逗号分隔）</label>
               <input v-model="tagsText" class="input" placeholder="Redis, 缓存, 排查" />
             </div>
@@ -122,6 +133,7 @@ import { errorMessage } from "@/api/http";
 import type { RecallHit } from "@/api/conversation";
 import EmptyState from "@/components/base/EmptyState.vue";
 import MarkdownView from "@/components/base/MarkdownView.vue";
+import SuggestCombo from "@/components/base/SuggestCombo.vue";
 import { useConversationStore } from "@/stores/conversation";
 import { useLibraryStore } from "@/stores/library";
 import { useUiStore } from "@/stores/ui";
@@ -133,6 +145,27 @@ const library = useLibraryStore();
 const ui = useUiStore();
 const loading = ref(true);
 const tagsText = ref("");
+/** 领域可编辑值：初始取草稿自带的领域；职责归经验——这里只是人工修正入口 */
+const domainText = ref("");
+watch(
+  () => store.current?.draft?.domain,
+  (value) => {
+    if (domainText.value === "" && value) {
+      domainText.value = value;
+    }
+  },
+  { immediate: true },
+);
+const domainValue = computed(() => domainText.value || store.current?.draft?.domain || "");
+const domainOptions = computed(() =>
+  Object.keys(library.domainCounts)
+    .filter((name) => name && name !== "undefined")
+    .sort()
+    .map((name) => ({ value: name, label: name })),
+);
+function onDomainChange(value: string) {
+  domainText.value = value;
+}
 const selectedRelated = ref<Record<string, boolean>>({});
 
 const draft = computed(() => store.current?.draft ?? null);
@@ -227,6 +260,7 @@ async function save() {
       date: target.date,
       summary: target.summary,
       content: target.content,
+      domain: domainValue.value,
       tags,
       problem: target.problem,
       cause: target.cause,

@@ -15,7 +15,7 @@ public class ConversationCommitRequest {
 
     private String content;
 
-    private String kind;
+    private String domain;
 
     private List<String> tags;
 

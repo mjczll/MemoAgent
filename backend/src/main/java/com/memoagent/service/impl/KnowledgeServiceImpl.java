@@ -144,6 +144,19 @@ public class KnowledgeServiceImpl implements KnowledgeService {
     }
 
     @Override
+    public List<String> domainSummary() {
+        return knowledgeMapper.selectList(Wrappers.<Knowledge>lambdaQuery()
+                        .eq(Knowledge::getUserId, CurrentUser.id())
+                        .select(Knowledge::getDomain))
+                .stream()
+                .map(Knowledge::getDomain)
+                .filter(StringUtils::hasText)
+                .map(String::trim)
+                .distinct()
+                .toList();
+    }
+
+    @Override
     @Transactional
     public void delete(Long id) {
         requireOwned(id);

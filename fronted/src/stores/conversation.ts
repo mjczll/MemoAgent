@@ -175,6 +175,7 @@ export const useConversationStore = defineStore("conversation", {
       date?: string;
       summary?: string;
       content?: string;
+      domain?: string;
       tags?: string[];
       problem?: string;
       cause?: string;
