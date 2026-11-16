@@ -16,8 +16,6 @@ public class DiaryGeneration {
 
     private String content;
 
-    private String kind;
-
     private List<String> tags = new ArrayList<>();
 
     private List<ExperienceCandidate> experiences = new ArrayList<>();

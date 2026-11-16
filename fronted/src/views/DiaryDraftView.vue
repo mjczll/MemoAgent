@@ -47,16 +47,6 @@
               <input v-model="draft.date" type="date" class="input" />
             </div>
             <div class="field">
-              <label>类型</label>
-              <SuggestCombo
-                v-model="draft.kind"
-                :options="kindOptions"
-                :maxlength="32"
-                placeholder="选择已有类型，或输入新类型"
-                aria-label="选择已有类型"
-              />
-            </div>
-            <div class="field">
               <label>标签（逗号分隔）</label>
               <input v-model="tagsText" class="input" placeholder="Redis, 缓存, 排查" />
             </div>
@@ -132,7 +122,6 @@ import { errorMessage } from "@/api/http";
 import type { RecallHit } from "@/api/conversation";
 import EmptyState from "@/components/base/EmptyState.vue";
 import MarkdownView from "@/components/base/MarkdownView.vue";
-import SuggestCombo from "@/components/base/SuggestCombo.vue";
 import { useConversationStore } from "@/stores/conversation";
 import { useLibraryStore } from "@/stores/library";
 import { useUiStore } from "@/stores/ui";
@@ -148,7 +137,6 @@ const selectedRelated = ref<Record<string, boolean>>({});
 
 const draft = computed(() => store.current?.draft ?? null);
 const saved = computed(() => store.current?.status === "committed");
-const kindOptions = computed(() => library.diaryKinds.map((item) => item.name));
 const related = computed(() => store.current?.related ?? []);
 
 function relationKey(item: RecallHit) {
@@ -239,7 +227,6 @@ async function save() {
       date: target.date,
       summary: target.summary,
       content: target.content,
-      kind: target.kind,
       tags,
       problem: target.problem,
       cause: target.cause,

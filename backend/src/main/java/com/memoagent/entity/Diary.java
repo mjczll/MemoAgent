@@ -28,8 +28,6 @@ public class Diary {
 
     private LocalDate diaryDate;
 
-    private String kind;
-
     private String origin;
 
     @TableLogic

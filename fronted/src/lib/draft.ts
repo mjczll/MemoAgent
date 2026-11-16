@@ -1,4 +1,4 @@
-import type { DiaryDraft, DiaryKind } from "@/types";
+import type { DiaryDraft } from "@/types";
 import { todayISO, truncate, uid } from "./format";
 import { searchLibrary, type LibraryData } from "./search";
 import { extractKeywords, type TopicGuess } from "./topic";
@@ -13,33 +13,10 @@ const SECTION_TITLES = [
 
 const PLACEHOLDER = "（这一部分我没有问到，稍后可以自己补充）";
 
-function kindSuffix(kind: DiaryKind): string {
-  switch (kind) {
-    case "技术":
-      return "踩坑记录";
-    case "复盘":
-      return "复盘";
-    case "学习":
-      return "学习笔记";
-    case "项目":
-      return "项目记录";
-    case "问题":
-      return "问题记录";
-    case "思考":
-      return "思考笔记";
-    case "日常":
-      return "日常记录";
-    default:
-      return "记录";
-  }
-}
-
 /** 采访完成 → 生成日记草稿（Mock AI 的结构化产出） */
 export function buildDraft(answers: string[], topic: TopicGuess, data: LibraryData): DiaryDraft {
   const scenario = topic.scenario;
   const cleaned = answers.map((a) => (a ?? "").trim());
-  const kind: DiaryKind = scenario?.kind ?? "复盘";
-
   const sections = SECTION_TITLES.map((title, index) => {
     const answer = cleaned[index] ?? "";
     return `## ${title}\n\n${answer || PLACEHOLDER}`;
@@ -92,8 +69,8 @@ export function buildDraft(answers: string[], topic: TopicGuess, data: LibraryDa
     : truncate(cleaned[0] || `${topic.label}的记录`, 60);
 
   const title = scenario
-    ? `${scenario.label}：${kindSuffix(kind)}`
-    : `${topic.label} · ${kindSuffix(kind)}`;
+    ? `${scenario.label}`
+    : `${topic.label} · 一篇记录`;
 
   const tags = scenario ? [...scenario.tags] : [...new Set(topic.tags.length ? topic.tags : extractKeywords(searchText, 3))];
 
@@ -101,7 +78,6 @@ export function buildDraft(answers: string[], topic: TopicGuess, data: LibraryDa
     id: uid("draft"),
     title,
     date: todayISO(),
-    kind,
     tags: tags.slice(0, 5),
     summary,
     content,

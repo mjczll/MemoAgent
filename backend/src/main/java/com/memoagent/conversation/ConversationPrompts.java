@@ -57,7 +57,7 @@ public final class ConversationPrompts {
             根据用户在对话里说过的话整理草稿，返回一个 JSON 对象，字段使用 camelCase。
             所有字段使用与用户原话相同的语言，不要自行切换语种，也不要在一种语言里混进另一种语言的词。tags 不要带 # 号。
             incident：用户是否讲了一件已经发生的具体事情。只是在问概念则为 false。
-            incident 为 true 时，title、kind、domain、tags、summary、content、problem、cause、solution、lesson 只能整理用户原话，缺的写「待补充」。
+            incident 为 true 时，title、domain、tags、summary、content、problem、cause、solution、lesson 只能整理用户原话，缺的写「待补充」。
             incident 为 false 时，这些正文字段留空。
             不要把助手的解释写进 content 或 lesson。
             正文写成一篇日记，用连贯的话转述用户讲过的事。不要逐句编号，不要把对话记录原样抄进去。
@@ -71,7 +71,6 @@ public final class ConversationPrompts {
             所有字段使用与复盘正文相同的语言，tags 不要带 # 号。只输出 JSON，不要输出别的文字。
             incident 固定填 true。
             title：不超过 24 字，概括这段时间的主题，例如「11 月缓存问题复盘」。
-            kind：填「记录」。
             tags：填「复盘」，不要再加别的词。
             domain：取复盘内容中最主要的领域（如「缓存」「后端」）；跨多个领域时取出现最多的一个。
             summary：一句话概括这段复盘，不超过 60 字。

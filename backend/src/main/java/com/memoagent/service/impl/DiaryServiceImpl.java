@@ -5,7 +5,6 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.memoagent.ai.DiaryCreatedEvent;
 import com.memoagent.common.CurrentUser;
-import com.memoagent.common.DiaryKinds;
 import com.memoagent.common.DiaryOrigins;
 import com.memoagent.common.Texts;
 import com.memoagent.dto.DiaryCreateRequest;
@@ -39,10 +38,13 @@ import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -71,7 +73,6 @@ public class DiaryServiceImpl implements DiaryService {
         diary.setContent(request.getContent());
         diary.setSummary(resolveSummary(request.getSummary(), request.getContent()));
         diary.setDiaryDate(request.getDate());
-        diary.setKind(DiaryKinds.normalize(request.getKind()));
         diary.setOrigin(DiaryOrigins.normalize(request.getOrigin()));
         diary.setCreatedAt(now);
         diary.setUpdatedAt(now);
@@ -93,9 +94,6 @@ public class DiaryServiceImpl implements DiaryService {
         boolean asc = "asc".equalsIgnoreCase(query.getSort());
         LambdaQueryWrapper<Diary> wrapper = Wrappers.lambdaQuery();
         wrapper.eq(Diary::getUserId, CurrentUser.id());
-        if (StringUtils.hasText(query.getKind()) && !"all".equalsIgnoreCase(query.getKind())) {
-            wrapper.eq(Diary::getKind, query.getKind().trim());
-        }
         if (StringUtils.hasText(query.getOrigin()) && !"all".equalsIgnoreCase(query.getOrigin())) {
             wrapper.eq(Diary::getOrigin, DiaryOrigins.normalize(query.getOrigin()));
         }
@@ -105,8 +103,13 @@ public class DiaryServiceImpl implements DiaryService {
                     .or().like(Diary::getSummary, keyword)
                     .or().like(Diary::getContent, keyword));
         }
-        if (StringUtils.hasText(query.getTag()) && !"all".equalsIgnoreCase(query.getTag())) {
-            List<Long> taggedIds = diaryIdsByTag(query.getTag().trim());
+        if (StringUtils.hasText(query.getTags()) && !"all".equalsIgnoreCase(query.getTags())) {
+            List<String> tagNames = Arrays.stream(query.getTags().split(","))
+                    .map(String::trim)
+                    .filter(StringUtils::hasText)
+                    .distinct()
+                    .toList();
+            List<Long> taggedIds = diaryIdsByTags(tagNames);
             if (taggedIds.isEmpty()) {
                 return new PageData<>(List.of(), 0, query.getPage(), query.getSize());
             }
@@ -168,7 +171,6 @@ public class DiaryServiceImpl implements DiaryService {
         diary.setContent(request.getContent());
         diary.setSummary(resolveSummary(request.getSummary(), request.getContent()));
         diary.setDiaryDate(request.getDate());
-        diary.setKind(DiaryKinds.normalize(request.getKind()));
         if (request.getOrigin() != null) {
             diary.setOrigin(DiaryOrigins.normalize(request.getOrigin()));
         }
@@ -251,10 +253,17 @@ public class DiaryServiceImpl implements DiaryService {
         return tag;
     }
 
-    /** 按标签名查打了该标签的日记 id（当前用户的日记范围内）。 */
-    private List<Long> diaryIdsByTag(String tagName) {
-        Tag tag = tagMapper.selectOne(Wrappers.<Tag>lambdaQuery().eq(Tag::getName, tagName).last("LIMIT 1"));
-        if (tag == null) {
+    /**
+     * 按标签名集合查日记 id（当前用户的日记范围内），多标签为 AND 语义：
+     * 返回同时包含全部选中标签的日记；任一标签无记录则返回空。
+     */
+    private List<Long> diaryIdsByTags(List<String> tagNames) {
+        if (tagNames.isEmpty()) {
+            return List.of();
+        }
+        List<Tag> tags = tagMapper.selectList(Wrappers.<Tag>lambdaQuery().in(Tag::getName, tagNames));
+        if (tags.size() < tagNames.size()) {
+            // 有标签根本不存在，交集必然为空
             return List.of();
         }
         List<Long> diaryIds = diaryMapper.selectList(Wrappers.<Diary>lambdaQuery()
@@ -264,13 +273,30 @@ public class DiaryServiceImpl implements DiaryService {
         if (diaryIds.isEmpty()) {
             return List.of();
         }
-        return diaryTagMapper.selectList(Wrappers.<DiaryTag>lambdaQuery()
-                        .eq(DiaryTag::getTagId, tag.getId())
+        List<Long> tagIds = tags.stream().map(Tag::getId).toList();
+        Map<Long, Set<Long>> diaryIdsByTagId = diaryTagMapper.selectList(Wrappers.<DiaryTag>lambdaQuery()
+                        .in(DiaryTag::getTagId, tagIds)
                         .in(DiaryTag::getDiaryId, diaryIds))
-                .stream().map(DiaryTag::getDiaryId).distinct().toList();
+                .stream()
+                .collect(Collectors.groupingBy(DiaryTag::getTagId,
+                        Collectors.mapping(DiaryTag::getDiaryId, Collectors.toSet())));
+        Set<Long> intersection = null;
+        for (Long tagId : tagIds) {
+            Set<Long> ids = diaryIdsByTagId.getOrDefault(tagId, Set.of());
+            if (intersection == null) {
+                intersection = new HashSet<>(ids);
+            } else {
+                intersection.retainAll(ids);
+            }
+            if (intersection.isEmpty()) {
+                return List.of();
+            }
+        }
+        return new ArrayList<>(intersection);
     }
 
-    private Map<Long, List<String>> loadTagNames(List<Long> diaryIds) {        if (diaryIds.isEmpty()) {
+    private Map<Long, List<String>> loadTagNames(List<Long> diaryIds) {
+        if (diaryIds.isEmpty()) {
             return Map.of();
         }
         List<DiaryTag> relations = diaryTagMapper.selectList(
@@ -298,7 +324,6 @@ public class DiaryServiceImpl implements DiaryService {
         vo.setId(diary.getId());
         vo.setTitle(diary.getTitle());
         vo.setDate(diary.getDiaryDate());
-        vo.setKind(diary.getKind());
         vo.setOrigin(diary.getOrigin());
         vo.setSummary(diary.getSummary());
         vo.setContent(diary.getContent());
@@ -320,7 +345,6 @@ public class DiaryServiceImpl implements DiaryService {
         vo.setId(diary.getId());
         vo.setTitle(diary.getTitle());
         vo.setDate(diary.getDiaryDate());
-        vo.setKind(diary.getKind());
         vo.setOrigin(diary.getOrigin());
         vo.setSummary(diary.getSummary());
         vo.setTags(tags);

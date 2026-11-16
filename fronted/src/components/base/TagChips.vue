@@ -5,18 +5,18 @@
       :key="option.value"
       type="button"
       class="filter-chip"
-      :class="{ on: option.value === modelValue }"
-      :aria-pressed="option.value === modelValue"
-      @click="emit('update:modelValue', option.value === modelValue ? allValue : option.value)"
+      :class="{ on: modelValue.includes(option.value) }"
+      :aria-pressed="modelValue.includes(option.value)"
+      @click="toggle(option.value)"
     >
       # {{ option.label }}
       <span v-if="option.count !== undefined" class="filter-count">{{ option.count }}</span>
     </button>
     <button
-      v-if="clearable && modelValue !== allValue"
+      v-if="clearable && modelValue.length"
       type="button"
       class="filter-chip clear"
-      @click="emit('update:modelValue', allValue)"
+      @click="emit('update:modelValue', [])"
     >
       清除标签
     </button>
@@ -27,21 +27,26 @@
 import type { FilterOption } from "./filterOption";
 
 /**
- * 标签集合筛选。与普通枚举筛选的区别：表达的是「标签集合」，
- * 视觉上比 Segment 低半档（30px vs 34px），单选起步。
- * 标签多时随容器换行；需要收纳时按规范升级为 FilterSelect。
+ * 标签集合筛选，支持多选：点选叠加、再点取消。
+ * 多标签在查询端为 AND 语义（同时包含全部选中标签）。
  */
-withDefaults(
+const props = withDefaults(
   defineProps<{
-    modelValue: string;
+    /** 当前选中的标签值集合 */
+    modelValue: string[];
     options: FilterOption[];
-    /** 代表「不限」的值 */
-    allValue?: string;
     clearable?: boolean;
     ariaLabel?: string;
   }>(),
-  { allValue: "all", clearable: true, ariaLabel: "按标签筛选" },
+  { clearable: true, ariaLabel: "按标签筛选" },
 );
 
-const emit = defineEmits<{ (e: "update:modelValue", value: string): void }>();
+const emit = defineEmits<{ (e: "update:modelValue", value: string[]): void }>();
+
+function toggle(value: string) {
+  const next = props.modelValue.includes(value)
+    ? props.modelValue.filter((item) => item !== value)
+    : [...props.modelValue, value];
+  emit("update:modelValue", next);
+}
 </script>

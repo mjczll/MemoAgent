@@ -4,7 +4,11 @@
       <div class="grow">
         <h1 class="h1">日记</h1>
         <p class="lede" style="margin-bottom: 0">
-          全部原始记录都在这里：{{ stats.interviewOrigin }} 篇来自采访，{{ stats.diaries - stats.interviewOrigin - (stats.reviewOrigin ?? 0) }} 篇手动记录{{ (stats.reviewOrigin ?? 0) ? `，${stats.reviewOrigin} 篇复盘` : "" }}。
+          {{
+            error
+              ? "后端数据不可用，列表未加载。"
+              : `全部原始记录都在这里：${stats.interviewOrigin} 篇来自采访，${stats.diaries - stats.interviewOrigin - (stats.reviewOrigin ?? 0)} 篇手动记录${(stats.reviewOrigin ?? 0) ? `，${stats.reviewOrigin} 篇复盘` : ""}。`
+          }}
         </p>
       </div>
       <button class="btn primary" @click="router.push('/diaries/new')">写日记</button>
@@ -15,13 +19,6 @@
         v-model="filters.keyword"
         placeholder="搜索标题、摘要或正文…"
         @search="onFilterChange"
-      />
-      <FilterSelect
-        v-model="filters.kind"
-        :options="kindOptions"
-        label="类型"
-        aria-label="按类型筛选"
-        @update:model-value="onFilterChange"
       />
       <FilterSegment
         v-model="filters.origin"
@@ -39,17 +36,23 @@
 
     <div v-if="tagOptions.length" style="margin-bottom: 12px">
       <TagChips
-        v-model="filters.tag"
+        :model-value="selectedTags"
         :options="tagOptions"
-        @update:model-value="onFilterChange"
+        @update:model-value="onTagsChange"
       />
     </div>
 
     <div class="panel">
       <div class="panel-head">
-        <b>共 {{ total }} 篇</b>
+        <b>{{ error ? "加载失败" : `共 ${total} 篇` }}</b>
         <span class="spacer" />
-        <span class="small faint">{{ loading ? "正在从后端加载…" : "点击任意一条进入详情" }}</span>
+        <span class="small faint">{{
+          error
+            ? "后端数据不可用，以下内容不完整"
+            : loading
+              ? "正在从后端加载…"
+              : "点击任意一条进入详情"
+        }}</span>
       </div>
       <div v-if="error" class="panel-body">
         <EmptyState icon="⚠" title="日记加载失败" :hint="error">
@@ -66,7 +69,6 @@
           <span class="tag accent origin-corner">{{ originLabel(item.origin) }}</span>
           <div class="title">
             <b>{{ item.title }}</b>
-            <span class="badge">{{ item.kind }}</span>
           </div>
           <div class="meta">
             <span>{{ item.date }}</span>
@@ -89,7 +91,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { errorMessage } from "@/api/http";
 import { listDiaryTags, type TagCount } from "@/api/diary";
@@ -97,7 +99,6 @@ import EmptyState from "@/components/base/EmptyState.vue";
 import FilterBar from "@/components/base/FilterBar.vue";
 import FilterSearch from "@/components/base/FilterSearch.vue";
 import FilterSegment from "@/components/base/FilterSegment.vue";
-import FilterSelect from "@/components/base/FilterSelect.vue";
 import TagChips from "@/components/base/TagChips.vue";
 import { relative } from "@/lib/format";
 import { useFilterSync } from "@/lib/filterSync";
@@ -112,9 +113,8 @@ const { filters, applyRoute, writeRoute } = useFilterSync({
   routeName: "diaries",
   defaults: {
     keyword: "",
-    kind: "all",
     origin: "all",
-    tag: "all",
+    tags: "",
     sort: "desc",
     page: "1",
   },
@@ -138,21 +138,6 @@ const tagOptions = computed(() =>
 
 const stats = computed(() => library.stats);
 
-const kindOptions = computed(() => [
-  {
-    value: "all",
-    label: "全部",
-    count: library.diaryKinds.reduce((sum, item) => sum + item.diaryCount, 0) || library.diaries.length,
-  },
-  ...library.diaryKinds
-    .filter((item) => item.diaryCount > 0)
-    .map((item) => ({
-      value: item.name,
-      label: item.name,
-      count: item.diaryCount,
-    })),
-]);
-
 const originOptions = [
   { value: "all", label: "全部来源" },
   { value: "manual", label: "用户编写" },
@@ -171,9 +156,8 @@ async function load() {
   try {
     const page = await library.queryDiaries({
       keyword: filters.keyword,
-      kind: filters.kind,
       origin: filters.origin,
-      tag: filters.tag,
+      tags: selectedTags.value,
       sort: filters.sort === "asc" ? "asc" : "desc",
       page: Number(filters.page) || 1,
       size: 100,
@@ -193,6 +177,16 @@ async function load() {
 function onFilterChange() {
   filters.page = "1";
   writeRoute();
+}
+
+/** 多选标签在 URL 里以逗号连接的字符串存取（与 useFilterSync 的字符串状态兼容） */
+const selectedTags = computed(() =>
+  filters.tags.split(",").map((item) => item.trim()).filter(Boolean),
+);
+
+function onTagsChange(tags: string[]) {
+  filters.tags = tags.join(",");
+  onFilterChange();
 }
 
 /** 三种来源统一显示成与「采访生成」一致的高亮徽标 */
@@ -216,16 +210,6 @@ onMounted(async () => {
   await library.hydrate();
   await load();
 });
-
-watch(
-  () => library.diaryKinds.map((item) => item.name).join(","),
-  () => {
-    if (filters.kind !== "all" && !library.diaryKinds.some((item) => item.name === filters.kind)) {
-      filters.kind = "all";
-      writeRoute();
-    }
-  },
-);
 </script>
 
 <style scoped>

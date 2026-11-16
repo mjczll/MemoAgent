@@ -14,8 +14,6 @@ public class DraftReply {
 
     private String title;
 
-    private String kind;
-
     private String domain;
 
     private List<String> tags = new ArrayList<>();

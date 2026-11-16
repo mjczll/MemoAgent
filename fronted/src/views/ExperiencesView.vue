@@ -25,28 +25,38 @@
       />
     </FilterBar>
 
-    <div class="grid cols-3">
-      <EntryCard
-        v-for="item in list"
-        :key="item.id"
-        :title="item.title"
-        :desc="`问题：${item.problem}\n经验：${item.lesson}`"
-        :to="`/experiences/${item.id}`"
-        :badge="item.domain"
-        :meta-items="[item.createdAt.slice(0, 10), `关联知识 ${item.knowledgeIds.length}`]"
-        :tags="item.tags"
-        color="#e8c07d"
-      />
+    <div v-if="loadError" class="panel">
+      <div class="panel-body">
+        <EmptyState icon="⚠" title="经验加载失败" :hint="`${loadError}（后端数据不可用，以下内容不完整）`">
+          <button class="btn primary sm" @click="retry">重试</button>
+        </EmptyState>
+      </div>
     </div>
 
-    <EmptyState
-      v-if="!list.length"
-      icon="🧩"
-      title="还没有匹配的经验卡"
-      hint="经验来自日记的自动提炼，先去采访或写一篇日记吧。"
-    >
-      <button class="btn primary sm" @click="router.push('/')">去对话</button>
-    </EmptyState>
+    <template v-else>
+      <div class="grid cols-3">
+        <EntryCard
+          v-for="item in list"
+          :key="item.id"
+          :title="item.title"
+          :desc="`问题：${item.problem}\n经验：${item.lesson}`"
+          :to="`/experiences/${item.id}`"
+          :badge="item.domain"
+          :meta-items="[item.createdAt.slice(0, 10), `关联知识 ${item.knowledgeIds.length}`]"
+          :tags="item.tags"
+          color="#e8c07d"
+        />
+      </div>
+
+      <EmptyState
+        v-if="!list.length"
+        icon="🧩"
+        title="还没有匹配的经验卡"
+        hint="经验来自日记的自动提炼，先去采访或写一篇日记吧。"
+      >
+        <button class="btn primary sm" @click="router.push('/')">去对话</button>
+      </EmptyState>
+    </template>
   </div>
 </template>
 
@@ -100,4 +110,11 @@ const list = computed(() => {
 
 // 首次进入时从 URL 恢复筛选状态（客户端过滤是响应式的，无需手动触发查询）
 applyRoute();
+
+const loadError = computed(() => library.experiencesError);
+
+/** 后端不可用时的重试入口 */
+async function retry() {
+  await library.refreshExperiences();
+}
 </script>

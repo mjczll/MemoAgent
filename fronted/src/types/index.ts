@@ -16,17 +16,6 @@ export type DomainName =
 /** 内容可见性：私有 / 已公开到探索知识 */
 export type Visibility = "private" | "public";
 
-/** 日记类型名称。由已有日记聚合而来，没有对应日记则不存在。 */
-export type DiaryKind = string;
-
-export interface DiaryKindItem {
-  id: string;
-  name: DiaryKind;
-  sortOrder: number;
-  isDefault: boolean;
-  diaryCount: number;
-}
-
 /** 掌握程度 */
 export type Mastery = "已掌握" | "部分掌握" | "待补充";
 
@@ -77,8 +66,6 @@ export interface Diary {
   title: string;
   /** ISO 日期 YYYY-MM-DD */
   date: string;
-  kind: DiaryKind;
-  kindId?: string;
   tags: string[];
   /** 一句话摘要 */
   summary: string;
@@ -136,7 +123,6 @@ export interface DiaryDraft {
   id: string;
   title: string;
   date: string;
-  kind: DiaryKind;
   tags: string[];
   summary: string;
   content: string;

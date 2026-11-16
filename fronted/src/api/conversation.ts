@@ -48,7 +48,6 @@ export interface ConversationDraft {
   incident: boolean;
   title: string;
   date: string;
-  kind: string;
   domain?: string;
   tags: string[];
   summary: string;
@@ -303,7 +302,6 @@ export function commitConversation(
     date?: string;
     summary?: string;
     content?: string;
-    kind?: string;
     tags?: string[];
     problem?: string;
     cause?: string;

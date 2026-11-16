@@ -5,7 +5,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.memoagent.ai.KnowledgeCandidate;
 import com.memoagent.common.CurrentUser;
-import com.memoagent.common.DiaryKinds;
 import com.memoagent.common.DiaryOrigins;
 import com.memoagent.common.Texts;
 import com.memoagent.conversation.CommitResult;
@@ -541,7 +540,6 @@ public class ConversationServiceImpl implements ConversationService {
         diaryRequest.setContent(draft.getContent());
         diaryRequest.setSummary(Texts.truncate(draft.getSummary(), 500));
         diaryRequest.setDate(draftDate(draft));
-        diaryRequest.setKind("记录");
         diaryRequest.setOrigin(DiaryOrigins.REVIEW);
         diaryRequest.setTags(draft.getTags());
         DiaryDetailVO diary = diaryService.create(diaryRequest);
@@ -575,7 +573,6 @@ public class ConversationServiceImpl implements ConversationService {
         diaryRequest.setContent(draft.getContent());
         diaryRequest.setSummary(Texts.truncate(draft.getSummary(), 500));
         diaryRequest.setDate(draftDate(draft));
-        diaryRequest.setKind(DiaryKinds.normalize(StringUtils.hasText(draft.getKind()) ? draft.getKind() : "记录"));
         diaryRequest.setOrigin(DiaryOrigins.INTERVIEW);
         diaryRequest.setTags(draft.getTags());
         DiaryDetailVO diary = diaryService.create(diaryRequest);
@@ -718,9 +715,6 @@ public class ConversationServiceImpl implements ConversationService {
         }
         if (request.getContent() != null) {
             draft.setContent(request.getContent());
-        }
-        if (StringUtils.hasText(request.getKind())) {
-            draft.setKind(request.getKind().trim());
         }
         if (request.getTags() != null) {
             draft.setTags(Texts.normalizeTags(request.getTags()));

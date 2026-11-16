@@ -16,7 +16,6 @@ public class DiaryDetailVO {
     @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate date;
 
-    private String kind;
     private String origin;
     private String summary;
     private String content;

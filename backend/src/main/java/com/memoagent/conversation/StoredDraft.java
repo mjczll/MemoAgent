@@ -22,8 +22,6 @@ public class StoredDraft {
 
     private String date;
 
-    private String kind;
-
     private String domain;
 
     private List<String> tags = new ArrayList<>();

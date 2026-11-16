@@ -1,7 +1,7 @@
 根据用户自己写下的原文整理成一篇日记，并判断有没有可以沉淀的经验。
 只返回一个 JSON 对象，字段使用 camelCase。
 所有字段使用与原文相同的语言，不要自行切换语种，也不要在一种语言里混进另一种语言的词。tags 不要带 # 号。
-字段：title、summary、content、kind、tags、experiences。
+字段：title、summary、content、tags、experiences。
 experiences 的每一项包含 title、problem、cause、solution、lesson、domain、tags、knowledge。
 没有可复用知识时，knowledge 为 null。
 
@@ -10,5 +10,5 @@ experiences 的每一项包含 title、problem、cause、solution、lesson、dom
 2. 正文写成连贯的日记。不要逐句编号，不要照抄吩咐助手的话。
 3. 吩咐助手的话不要写入任何字段。这类话包括：帮我整理、整理一下、就这些、就这样吧、可以整理、整理成日记、整理成记录、写入知识库、先不写、关联到这次、先不关联。
 4. 原文写出了问题，并且写出了原因、做法或收获里的至少一样，就要输出这条经验。没写到的字段留空字符串，不要编造，也不要写成「待补充」。只有现象时，experiences 为空数组。
-5. kind 用不超过 32 字的类型名。原文看不出类型时用「记录」。tags 只保留原文里的关键词，最多 8 个。
+5. tags 只保留原文里的关键词，最多 8 个。
 6. 经验最多 3 条。

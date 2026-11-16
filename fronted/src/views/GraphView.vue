@@ -2,6 +2,13 @@
   <div class="graph-page">
     <div ref="canvasHost" class="canvas-area" />
 
+    <!-- 加载 / 错误态：图谱数据来自后端，失败时明确报错而不是显示空图 -->
+    <div v-if="graphLoading" class="graph-note">图谱加载中…</div>
+    <div v-else-if="graphError" class="graph-note error">
+      <span>图谱加载失败：{{ graphError }}</span>
+      <button type="button" class="btn sm" @click="loadGraph">重试</button>
+    </div>
+
     <!-- 齿轮按钮 -->
     <button class="gear-btn" :class="{ on: settingsOpen }" title="设置" @click="settingsOpen = !settingsOpen">⚙</button>
 
@@ -173,10 +180,11 @@
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useGraphEngine } from "@/composables/useGraphEngine";
-import { buildGraph, buildLocalGraph, graphStats } from "@/lib/graph";
+import { fetchGraph, fetchLocalGraph } from "@/api/graph";
+import { graphStats } from "@/lib/graphStats";
 import { relative } from "@/lib/format";
-import { DOMAINS } from "@/mock/domains";
 import { useLibraryStore } from "@/stores/library";
+import type { GraphData } from "@/types";
 import type { GraphNodeInput, GraphEdgeInput, ForcesConfig, DisplayConfig } from "@/graph/GraphEngine";
 
 const route = useRoute();
@@ -186,6 +194,10 @@ const library = useLibraryStore();
 /* ---- 判断全局/局部 ---- */
 const isLocal = computed(() => route.name === "graph-local");
 const localId = computed(() => (route.params.id as string) ?? "");
+const localType = computed(() => {
+  const value = route.query.type;
+  return value === "diary" || value === "experience" || value === "knowledge" ? value : "diary";
+});
 const localDepth = ref(Number(route.query.depth) ?? 2);
 
 const SETTINGS_KEY = "memoagent:graph-settings";
@@ -240,12 +252,49 @@ const canvasHost = ref<HTMLElement | null>(null);
 const { liveStats, mount, setData, setForces, setDisplay, select, search, fitView, zoomBy, replayGrowth, getSelectedNode } = useGraphEngine();
 
 /* ---- 数据 ---- */
-const graphData = computed(() => {
-  if (isLocal.value && localId.value) {
-    return buildLocalGraph(library.data, localId.value, localDepth.value);
+const EMPTY_GRAPH: GraphData = { nodes: [], edges: [] };
+const graphData = ref<GraphData>(EMPTY_GRAPH);
+const graphLoading = ref(false);
+const graphError = ref("");
+/** 全量图（不受领域过滤影响），供领域下拉取选项 */
+const fullGraph = ref<GraphData>(EMPTY_GRAPH);
+
+async function loadGraph() {
+  graphLoading.value = true;
+  graphError.value = "";
+  try {
+    let data: GraphData;
+    if (isLocal.value && localId.value) {
+      data = await fetchLocalGraph(localId.value, localType.value, localDepth.value);
+      // 全量图保持不动，领域下拉继续用它
+    } else if (!domain.value) {
+      data = await fetchGraph(null);
+      // 无领域过滤时返回的就是全图，顺手更新领域下拉的数据源
+      fullGraph.value = data;
+    } else {
+      // 领域过滤：先保证全量图（领域下拉的数据源）存在，再取过滤图
+      const [full, filtered] = await Promise.all([
+        fullGraph.value.nodes.length ? Promise.resolve(fullGraph.value) : fetchGraph(null),
+        fetchGraph(domain.value),
+      ]);
+      fullGraph.value = full;
+      if (!filtered.nodes.length && full.nodes.length) {
+        // 保存的领域过滤已失效（旧数据/mock 时代的领域名，现在聚合不出节点）：
+        // 自动回退全图并清除失效设置，否则领域下拉为空、过滤永远无法解除
+        domain.value = null;
+        return;
+      }
+      data = filtered;
+    }
+    // 关键：把取到的图写回响应式状态，watch(graphData) 才会触发渲染
+    graphData.value = data;
+  } catch (error) {
+    graphData.value = { nodes: [], edges: [] };
+    graphError.value = error instanceof Error ? error.message : String(error);
+  } finally {
+    graphLoading.value = false;
   }
-  return buildGraph(library.data, domain.value);
-});
+}
 
 const graphStatsAll = computed(() => graphStats(graphData.value));
 
@@ -259,10 +308,11 @@ const edgeRelationTypes = computed(() => {
   return Object.entries(counts).map(([value, count]) => ({ value, label: labelMap[value] ?? value, count })).sort((a, b) => b.count - a.count);
 });
 
-const domainOptions = computed(() => {
-  const counts = library.domainCounts;
-  return DOMAINS.filter((d) => (counts[d.name] ?? 0) > 0).map((d) => ({ name: d.name, count: counts[d.name] ?? 0 }));
-});
+const domainOptions = computed(() =>
+  fullGraph.value.nodes
+    .filter((n) => n.type === "domain")
+    .map((n) => ({ name: n.label, count: Math.round((n.weight - 8) / 1.6) })),
+);
 
 const searchHits = computed(() => {
   const q = searchQuery.value.trim().toLowerCase();
@@ -381,11 +431,16 @@ watch(colorGroups, () => { const d = buildInput(); setData(d.nodes, d.edges); se
 watch([typeFilter, orphansOnly, edgeFilter], () => { const d = buildInput(); setData(d.nodes, d.edges); setTimeout(() => fitView(), 300); });
 watch(searchQuery, (q) => search(q));
 watch(graphData, () => { const d = buildInput(); setData(d.nodes, d.edges); setTimeout(() => fitView(), 300); });
+watch([isLocal, localId, localDepth, domain], () => { void loadGraph(); });
 
 /* ---- Mount ---- */
 onMounted(async () => {
   if (!canvasHost.value) return;
+  // 数据加载与引擎挂载并行发起，但 setData 前保证两者都完成，
+  // 避免数据先到、watch 里的 setData 在引擎未就绪时被静默丢弃
+  const firstLoad = loadGraph();
   await mount(canvasHost.value);
+  await firstLoad;
   setForces({ ...forces });
   setDisplay({ ...display });
   search(searchQuery.value);
@@ -411,6 +466,10 @@ onMounted(async () => {
 .canvas-area { position: relative; width: 100%; height: 100%; }
 
 /* 齿轮 */
+/* 加载 / 错误提示 */
+.graph-note { position: absolute; top: 12px; left: 12px; z-index: 30; display: flex; align-items: center; gap: 8px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 5px; background: color-mix(in srgb, var(--paper) 90%, transparent); backdrop-filter: blur(8px); color: var(--mute); font-size: 12.5px; }
+.graph-note.error { color: var(--danger); border-color: var(--danger); }
+
 .gear-btn { position: absolute; top: 12px; right: 12px; z-index: 30; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 5px; background: color-mix(in srgb, var(--paper) 88%, transparent); backdrop-filter: blur(8px); color: var(--mute); font-size: 16px; cursor: pointer; transition: color 0.18s, border-color 0.18s; }
 .gear-btn:hover, .gear-btn.on { color: var(--ink); border-color: var(--ink-2); }
 

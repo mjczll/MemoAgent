@@ -1,5 +1,5 @@
 import { request } from "./http";
-import type { Diary, DiaryKind, Visibility } from "@/types";
+import type { Diary, Visibility } from "@/types";
 
 export interface DiaryPage<T> {
   records: T[];
@@ -10,9 +10,9 @@ export interface DiaryPage<T> {
 
 export interface DiaryQuery {
   keyword?: string;
-  kind?: string;
   origin?: string;
-  tag?: string;
+  /** 多选标签，AND 语义（同时包含全部标签） */
+  tags?: string[];
   sort?: "asc" | "desc";
   page?: number;
   size?: number;
@@ -28,7 +28,6 @@ export interface DiaryPayload {
   content: string;
   summary?: string;
   date: string;
-  kind: DiaryKind | string;
   origin?: Diary["origin"];
   tags?: string[];
 }
@@ -37,8 +36,6 @@ interface DiaryDto {
   id: number | string;
   title: string;
   date: string;
-  kind: string;
-  kindId?: number | string;
   origin?: string;
   summary?: string;
   content?: string;
@@ -59,8 +56,6 @@ export function toDiary(dto: DiaryDto): Diary {
     id: String(dto.id),
     title: dto.title,
     date: dto.date,
-    kind: dto.kind as DiaryKind,
-    kindId: dto.kindId != null ? String(dto.kindId) : undefined,
     tags: dto.tags ?? [],
     summary: dto.summary ?? "",
     content: dto.content ?? "",
@@ -77,9 +72,8 @@ export function toDiary(dto: DiaryDto): Diary {
 export function listDiaries(query: DiaryQuery = {}): Promise<DiaryPage<Diary>> {
   const params = new URLSearchParams();
   if (query.keyword?.trim()) params.set("keyword", query.keyword.trim());
-  if (query.kind && query.kind !== "all") params.set("kind", query.kind);
   if (query.origin && query.origin !== "all") params.set("origin", query.origin);
-  if (query.tag && query.tag !== "all") params.set("tag", query.tag);
+  if (query.tags?.length) params.set("tags", query.tags.join(","));
   if (query.sort) params.set("sort", query.sort);
   params.set("page", String(query.page ?? 1));
   params.set("size", String(query.size ?? 100));
@@ -141,7 +135,6 @@ export interface DiaryGeneration {
   title: string;
   summary: string;
   content: string;
-  kind: string;
   tags: string[];
   experiences: ExperienceCandidate[];
 }

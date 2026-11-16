@@ -1,6 +1,5 @@
 package com.memoagent.ai;
 
-import com.memoagent.common.DiaryKinds;
 import com.memoagent.common.Texts;
 import com.memoagent.conversation.DraftSanitizer;
 import com.memoagent.exception.BusinessException;
@@ -11,7 +10,6 @@ import java.util.List;
 public final class GenerationSanitizer {
 
     static final String DEFAULT_DOMAIN = "项目开发";
-    private static final String DEFAULT_KIND = "记录";
     private static final String DEFAULT_CATEGORY = "未分类";
     private static final String PENDING = "待补充";
     private static final int MAX_EXPERIENCES = 3;
@@ -40,8 +38,6 @@ public final class GenerationSanitizer {
         result.setContent(content);
         String summary = DraftSanitizer.omitCommands(reply.getSummary());
         result.setSummary(summary.isBlank() ? cut(content, 80) : cut(summary, 500));
-        String kind = DraftSanitizer.omitCommands(reply.getKind());
-        result.setKind(DiaryKinds.normalize(cut(kind.isBlank() ? DEFAULT_KIND : kind, 32)));
         result.setTags(cleanTags(reply.getTags(), source));
         result.setExperiences(sanitizeExperiences(reply.getExperiences(), result.getTitle(), source));
         return result;

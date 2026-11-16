@@ -23,7 +23,7 @@
 
     <div class="split">
       <div class="stack">
-        <div class="panel" style="cursor: pointer" @click="router.push(`/graph/local/${item.id}?depth=2`)">
+        <div class="panel" style="cursor: pointer" @click="router.push(`/graph/local/${item.id}?type=experience&depth=2`)">
           <div class="panel-head"><b>🔗 查看关系图</b><span class="spacer" /><span class="small faint">查看该经验的局部关系网络</span></div>
         </div>
 

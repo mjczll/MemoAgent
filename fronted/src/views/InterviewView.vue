@@ -90,7 +90,6 @@
         </div>
         <div class="row wrap small faint">
           <span>日期：{{ store.draft.date }}</span>
-          <span>类型：{{ store.draft.kind }}</span>
           <span>标签：{{ store.draft.tags.join(" / ") }}</span>
         </div>
         <div class="panel">

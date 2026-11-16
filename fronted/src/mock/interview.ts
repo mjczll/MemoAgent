@@ -1,4 +1,4 @@
-import type { DiaryKind, InterviewStep } from "@/types";
+import type { InterviewStep } from "@/types";
 
 /** 采访五步法：AI 像记者一样按顺序把一件事问清楚 */
 export const INTERVIEW_STEPS: InterviewStep[] = [
@@ -41,7 +41,6 @@ export interface ScenarioPreset {
   key: string;
   label: string;
   domain: string;
-  kind: DiaryKind;
   tags: string[];
   /** 命中该场景的关键词（小写） */
   keywords: string[];
@@ -66,7 +65,6 @@ export const SCENARIOS: ScenarioPreset[] = [
     key: "spring-ai",
     label: "Spring AI 踩坑",
     domain: "AI Agent",
-    kind: "技术",
     tags: ["Spring AI", "AI Agent", "踩坑"],
     keywords: ["spring ai", "tool calling", "function calling", "advisor", "prompt", "提示词", "大模型", "llm", "agent"],
     summary:
@@ -110,7 +108,6 @@ export const SCENARIOS: ScenarioPreset[] = [
     key: "redis",
     label: "Redis 缓存问题",
     domain: "Redis",
-    kind: "复盘",
     tags: ["Redis", "缓存", "线上问题"],
     keywords: ["redis", "缓存", "击穿", "雪崩", "穿透", "分布式锁", "热点 key"],
     summary:
@@ -144,7 +141,6 @@ export const SCENARIOS: ScenarioPreset[] = [
     key: "mysql",
     label: "MySQL 查询优化",
     domain: "MySQL",
-    kind: "技术",
     tags: ["MySQL", "索引", "慢查询"],
     keywords: ["mysql", "索引", "慢查询", "explain", "sql", "执行计划", "全表扫描"],
     summary: "MySQL 慢查询排查：先看执行计划，再改写 SQL 让索引可用。",
@@ -164,7 +160,6 @@ export const SCENARIOS: ScenarioPreset[] = [
     key: "rag",
     label: "RAG 检索效果",
     domain: "AI Agent",
-    kind: "技术",
     tags: ["RAG", "检索", "AI Agent"],
     keywords: ["rag", "检索", "召回", "向量", "embedding", "知识库检索"],
     summary: "RAG 答非所问的根因多数在召回侧：切片策略、相似度阈值与 TopK。",

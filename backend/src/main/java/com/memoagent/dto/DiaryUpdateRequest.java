@@ -24,9 +24,6 @@ public class DiaryUpdateRequest {
     @NotNull(message = "日期不能为空")
     private LocalDate date;
 
-    @NotBlank(message = "类型不能为空")
-    private String kind;
-
     private String origin;
 
     private List<String> tags;

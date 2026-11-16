@@ -44,16 +44,6 @@
               <input v-model="form.date" type="date" class="input" />
             </div>
             <div class="field">
-              <label>类型</label>
-              <SuggestCombo
-                v-model="form.kind"
-                :options="kindOptions"
-                :maxlength="32"
-                placeholder="选择已有类型，或输入新类型"
-                aria-label="选择已有类型"
-              />
-            </div>
-            <div class="field">
               <label>标签（逗号分隔）</label>
               <input v-model="form.tagsText" class="input" placeholder="Redis, 缓存, 排查" />
             </div>
@@ -115,12 +105,9 @@ import { errorMessage } from "@/api/http";
 import { generateDiary, type ExperienceCandidate } from "@/api/diary";
 import { createExperience } from "@/api/experience";
 import MarkdownView from "@/components/base/MarkdownView.vue";
-import SuggestCombo from "@/components/base/SuggestCombo.vue";
-import { normalizeKind } from "@/lib/kind";
 import { todayISO } from "@/lib/format";
 import { useLibraryStore } from "@/stores/library";
 import { useUiStore } from "@/stores/ui";
-import type { DiaryKind } from "@/types";
 
 const route = useRoute();
 const router = useRouter();
@@ -139,16 +126,14 @@ const organized = ref(false);
 const organizeError = ref("");
 const candidates = ref<OrganizedExperience[]>([]);
 const isEdit = computed(() => route.name === "diary-edit");
-const kindOptions = computed(() => library.diaryKinds.map((item) => item.name));
 const canSave = computed(
-  () => !saving.value && !organizing.value && Boolean(form.title.trim() && form.content.trim() && form.kind.trim()),
+  () => !saving.value && !organizing.value && Boolean(form.title.trim() && form.content.trim()),
 );
 const canOrganize = computed(() => !saving.value && !organizing.value && Boolean(form.content.trim()));
 
 const form = reactive({
   title: "",
   date: todayISO(),
-  kind: "" as DiaryKind,
   tagsText: "",
   summary: "",
   content: "",
@@ -165,7 +150,6 @@ onMounted(async () => {
   }
   form.title = diary.title;
   form.date = diary.date;
-  form.kind = diary.kind;
   form.tagsText = diary.tags.join(", ");
   form.summary = diary.summary;
   form.content = diary.content;
@@ -180,7 +164,6 @@ async function organize() {
     form.title = result.title;
     form.summary = result.summary ?? "";
     form.content = result.content;
-    form.kind = normalizeKind(result.kind || form.kind);
     form.tagsText = (result.tags ?? []).join(", ");
     candidates.value = (result.experiences ?? []).map((item) => ({
       ...item,
@@ -244,7 +227,6 @@ async function save() {
       : await library.createDiary({
           title: form.title.trim(),
           date: form.date,
-          kind: normalizeKind(form.kind),
           tags,
           summary,
           content: form.content,
@@ -254,7 +236,6 @@ async function save() {
       await library.updateDiary(id, {
         title: form.title.trim(),
         date: form.date,
-        kind: normalizeKind(form.kind),
         tags,
         summary,
         content: form.content,

@@ -13,8 +13,6 @@
           <div class="row wrap small faint">
             <span>{{ diary.date }}</span>
             <span>·</span>
-            <span>{{ diary.kind }}</span>
-            <span>·</span>
             <span>{{ originLabel(diary.origin) }}</span>
           </div>
           <div class="tags" style="margin-top: 10px">
@@ -41,7 +39,7 @@
       </div>
 
       <div class="stack">
-        <div class="panel" style="cursor: pointer" @click="router.push(`/graph/local/${diary.id}?depth=2`)">
+        <div class="panel" style="cursor: pointer" @click="router.push(`/graph/local/${diary.id}?type=diary&depth=2`)">
           <div class="panel-head"><b>🔗 查看关系图</b><span class="spacer" /><span class="small faint">查看该日记的局部关系网络</span></div>
         </div>
 

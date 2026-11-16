@@ -4,8 +4,11 @@
       <div class="grow">
         <h1 class="h1">知识库</h1>
         <p class="lede" style="margin-bottom: 0">
-          共 {{ library.knowledge.length }} 条知识，已掌握 {{ stats.mastered }} 条（{{ stats.masteryRate }}%），
-          涵盖 {{ stats.domains }} 个领域。
+          {{
+            loadError
+              ? "后端数据不可用，列表未加载。"
+              : `共 ${library.knowledge.length} 条知识，已掌握 ${stats.mastered} 条（${stats.masteryRate}%），涵盖 ${stats.domains} 个领域。`
+          }}
         </p>
       </div>
       <button type="button" class="btn primary" @click="openCreate">新建知识</button>
@@ -32,46 +35,56 @@
       />
     </FilterBar>
 
-    <div class="stack">
-      <div v-for="group in groups" :key="group.category" class="panel">
-        <div class="panel-head">
-          <b>{{ group.category }}</b>
-          <span class="spacer" />
-          <span class="small faint">{{ group.items.length }} 条</span>
-        </div>
-        <div class="list">
-          <div
-            v-for="item in group.items"
-            :key="item.id"
-            class="list-row"
-            @click="router.push(`/knowledge/${item.id}`)"
-          >
-            <div class="title">
-              <b>{{ item.title }}</b>
-              <span class="tag" :class="{ ok: item.mastery === '已掌握', warn: item.mastery === '待补充' }">
-                {{ item.mastery }}
-              </span>
-            </div>
-            <div class="meta">
-              <span>{{ item.domain }}</span>
-              <span>{{ item.category }}</span>
-              <span>互链 {{ item.relatedIds.length }}</span>
-              <span>{{ relative(item.updatedAt) }}更新</span>
-            </div>
-            <div class="desc">{{ item.summary }}</div>
-          </div>
-        </div>
+    <div v-if="loadError" class="panel">
+      <div class="panel-body">
+        <EmptyState icon="⚠" title="知识库加载失败" :hint="`${loadError}（后端数据不可用，以下内容不完整）`">
+          <button type="button" class="btn primary sm" @click="retry">重试</button>
+        </EmptyState>
       </div>
     </div>
 
-    <EmptyState
-      v-if="!groups.length"
-      icon="📚"
-      title="没有匹配的知识条目"
-      hint="换个关键词或领域试试，也可以手动新建一条。"
-    >
-      <button type="button" class="btn primary sm" @click="openCreate">新建知识</button>
-    </EmptyState>
+    <template v-else>
+      <div class="stack">
+        <div v-for="group in groups" :key="group.category" class="panel">
+          <div class="panel-head">
+            <b>{{ group.category }}</b>
+            <span class="spacer" />
+            <span class="small faint">{{ group.items.length }} 条</span>
+          </div>
+          <div class="list">
+            <div
+              v-for="item in group.items"
+              :key="item.id"
+              class="list-row"
+              @click="router.push(`/knowledge/${item.id}`)"
+            >
+              <div class="title">
+                <b>{{ item.title }}</b>
+                <span class="tag" :class="{ ok: item.mastery === '已掌握', warn: item.mastery === '待补充' }">
+                  {{ item.mastery }}
+                </span>
+              </div>
+              <div class="meta">
+                <span>{{ item.domain }}</span>
+                <span>{{ item.category }}</span>
+                <span>互链 {{ item.relatedIds.length }}</span>
+                <span>{{ relative(item.updatedAt) }}更新</span>
+              </div>
+              <div class="desc">{{ item.summary }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <EmptyState
+        v-if="!groups.length"
+        icon="📚"
+        title="没有匹配的知识条目"
+        hint="换个关键词或领域试试，也可以手动新建一条。"
+      >
+        <button type="button" class="btn primary sm" @click="openCreate">新建知识</button>
+      </EmptyState>
+    </template>
 
     <ModalDialog v-model="showCreate" title="新建知识条目" width="680px">
       <div class="stack">
@@ -150,6 +163,13 @@ const { filters, applyRoute, writeRoute } = useFilterSync({
 
 // 首次进入时从 URL 恢复筛选状态（客户端过滤是响应式的，无需手动触发查询）
 applyRoute();
+
+const loadError = computed(() => library.knowledgeError);
+
+/** 后端不可用时的重试入口 */
+async function retry() {
+  await library.refreshKnowledge();
+}
 
 const showCreate = ref(false);
 

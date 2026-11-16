@@ -54,7 +54,6 @@ public final class DraftSanitizer {
         draft.setIncident(source.isIncident() && !lines.isEmpty());
         draft.setDate(LocalDate.now().toString());
         draft.setTitle(firstText(omitCommands(source.getTitle()), lines.isEmpty() ? "一次对话" : Texts.truncate(lines.get(0), 40)));
-        draft.setKind(firstText(omitCommands(source.getKind()), "记录"));
         draft.setDomain(source.getDomain() == null ? "" : Texts.truncate(omitCommands(source.getDomain()), 64));
         draft.setTags(cleanTags(source.getTags(), reference));
         draft.setSummary(firstText(omitCommands(source.getSummary()), Texts.truncate(joined, 60)));
@@ -87,7 +86,6 @@ public final class DraftSanitizer {
         draft.setIncident(true);
         draft.setDate(LocalDate.now().toString());
         draft.setTitle(firstText(omitCommands(source.getTitle()), Texts.truncate(fallback, 24)));
-        draft.setKind("记录");
         draft.setDomain(Texts.truncate(omitCommands(source.getDomain()), 64));
         draft.setTags(cleanTags(source.getTags(), ""));
         if (!draft.getTags().contains("复盘")) {

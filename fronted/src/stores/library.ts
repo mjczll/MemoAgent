@@ -8,7 +8,6 @@ import {
   type DiaryPage,
   type DiaryQuery,
 } from "@/api/diary";
-import { listDiaryKinds } from "@/api/diaryKind";
 import {
   createExperience as createExperienceApi,
   getExperience,
@@ -23,19 +22,19 @@ import {
   updateKnowledge as updateKnowledgeApi,
 } from "@/api/knowledge";
 import { errorMessage } from "@/api/http";
-import type { Diary, DiaryDraft, DiaryKindItem, Experience, Knowledge } from "@/types";
+import type { Diary, DiaryDraft, Experience, Knowledge } from "@/types";
 import { todayISO, truncate } from "@/lib/format";
 import { searchLibrary, type LibraryData, type LibraryHit } from "@/lib/search";
-import { buildGraph } from "@/lib/graph";
 
 interface LibraryState {
   diaries: Diary[];
   experiences: Experience[];
   knowledge: Knowledge[];
-  diaryKinds: DiaryKindItem[];
   hydrated: boolean;
   diariesLoading: boolean;
   diariesError: string | null;
+  experiencesError: string | null;
+  knowledgeError: string | null;
 }
 
 function upsertById<T extends { id: string }>(list: T[], item: T): T[] {
@@ -52,10 +51,11 @@ export const useLibraryStore = defineStore("library", {
     diaries: [],
     experiences: [],
     knowledge: [],
-    diaryKinds: [],
     hydrated: false,
     diariesLoading: false,
     diariesError: null,
+    experiencesError: null,
+    knowledgeError: null,
   }),
 
   getters: {
@@ -137,9 +137,6 @@ export const useLibraryStore = defineStore("library", {
     pendingKnowledge(state) {
       return state.knowledge.filter((k) => k.mastery !== "已掌握").slice(0, 5);
     },
-    defaultDiaryKind(state): string {
-      return state.diaryKinds.find((item) => item.isDefault)?.name ?? state.diaryKinds[0]?.name ?? "";
-    },
   },
 
   actions: {
@@ -147,18 +144,9 @@ export const useLibraryStore = defineStore("library", {
       this.hydrated = true;
       await Promise.all([
         this.refreshDiaries(),
-        this.refreshDiaryKinds(),
         this.refreshExperiences(),
         this.refreshKnowledge(),
       ]);
-    },
-
-    async refreshDiaryKinds() {
-      try {
-        this.diaryKinds = await listDiaryKinds();
-      } catch {
-        this.diaryKinds = [];
-      }
     },
 
     async refreshDiaries() {
@@ -179,8 +167,10 @@ export const useLibraryStore = defineStore("library", {
       try {
         const page = await listExperiences({ page: 1, size: 100 });
         this.experiences = page.records;
-      } catch {
+        this.experiencesError = null;
+      } catch (error) {
         this.experiences = [];
+        this.experiencesError = errorMessage(error, "经验列表加载失败");
       }
     },
 
@@ -188,8 +178,10 @@ export const useLibraryStore = defineStore("library", {
       try {
         const page = await listKnowledge({ page: 1, size: 100 });
         this.knowledge = page.records;
-      } catch {
+        this.knowledgeError = null;
+      } catch (error) {
         this.knowledge = [];
+        this.knowledgeError = errorMessage(error, "知识列表加载失败");
       }
     },
 
@@ -233,10 +225,6 @@ export const useLibraryStore = defineStore("library", {
 
     search(query: string, limit = 8): LibraryHit[] {
       return searchLibrary(query, this.data, limit);
-    },
-
-    graph(domain: string | null = null) {
-      return buildGraph(this.data, domain);
     },
 
     async saveDraft(
@@ -304,7 +292,7 @@ export const useLibraryStore = defineStore("library", {
 
       this.diaries = upsertById(this.diaries, diary);
       this.experiences = upsertById(this.experiences, experience);
-      await Promise.all([this.refreshDiaryKinds(), this.refreshKnowledge(), this.refreshDiaries()]);
+      await Promise.all([this.refreshKnowledge(), this.refreshDiaries()]);
       return {
         diaryId: diary.id,
         experienceId: experience.id,
@@ -319,12 +307,10 @@ export const useLibraryStore = defineStore("library", {
         content: patch.content,
         summary: patch.summary ?? current?.summary,
         date: patch.date ?? current?.date ?? todayISO(),
-        kind: patch.kind ?? current?.kind ?? this.defaultDiaryKind,
         origin: patch.origin ?? current?.origin,
         tags: patch.tags ?? current?.tags,
       });
       this.diaries = upsertById(this.diaries, diary);
-      await this.refreshDiaryKinds();
       return diary;
     },
 
@@ -369,12 +355,10 @@ export const useLibraryStore = defineStore("library", {
         content: input.content,
         summary: input.summary,
         date: input.date ?? todayISO(),
-        kind: input.kind ?? this.defaultDiaryKind,
         origin: input.origin ?? "manual",
         tags: input.tags ?? [],
       });
       this.diaries = upsertById(this.diaries, diary);
-      await this.refreshDiaryKinds();
       return diary.id;
     },
 
@@ -398,7 +382,7 @@ export const useLibraryStore = defineStore("library", {
       await deleteDiaryApi(id);
       this.diaries = this.diaries.filter((d) => d.id !== id);
       this.experiences = this.experiences.filter((e) => e.diaryId !== id);
-      await Promise.all([this.refreshDiaryKinds(), this.refreshExperiences()]);
+      await Promise.all([this.refreshExperiences()]);
     },
 
     async deleteKnowledge(id: string) {
