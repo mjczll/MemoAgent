@@ -136,7 +136,7 @@ public class AssetQueryTools {
     }
 
     /** 清单结果。文本给模型看，记录本身给 {@link TurnAssetTools} 挂引用用；listed 是文本里实际列出的条数。 */
-    record Listing(String text, List<Row> rows, int listed) {
+    public record Listing(String text, List<Row> rows, int listed) {
     }
 
     /**
@@ -145,7 +145,7 @@ public class AssetQueryTools {
      * 单独拆出来是因为「同一批记录」有两个消费方：模型读文本写正文，
      * 页面需要一份 refs 才能显示「搜索到 N 条相关引用」的胶囊。
      */
-    Listing listing(String from, String to, String kinds, Integer limit) {
+    public Listing listing(String from, String to, String kinds, Integer limit) {
         LocalDate end;
         LocalDate start;
         try {

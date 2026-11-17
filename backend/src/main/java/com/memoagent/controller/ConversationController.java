@@ -39,6 +39,12 @@ public class ConversationController {
         return Result.ok(conversationService.create(request));
     }
 
+    /** 待办通知触发：生成本周回顾草稿（独立会话，status=drafted），由用户在草稿页确认提交。 */
+    @PostMapping("/review/weekly")
+    public Result<Long> generateWeeklyReview() {
+        return Result.ok(conversationService.generateWeeklyReview());
+    }
+
     @GetMapping
     public Result<List<ConversationListItemVO>> list() {
         return Result.ok(conversationService.list());

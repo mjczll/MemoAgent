@@ -18,6 +18,12 @@ const routes: RouteRecordRaw[] = [
     redirect: "/",
   },
   {
+    path: "/drafts",
+    name: "drafts",
+    component: () => import("@/views/DraftsCenterView.vue"),
+    meta: { title: "草稿中心", crumb: "草稿中心" },
+  },
+  {
     path: "/diaries",
     name: "diaries",
     component: () => import("@/views/DiariesView.vue"),

@@ -60,6 +60,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import reactor.core.Disposable;
 
 import java.io.IOException;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -384,6 +385,43 @@ public class ConversationServiceImpl implements ConversationService {
         return result;
     }
 
+    @Override
+    @Transactional
+    public Long generateWeeklyReview() {
+        if (!conversationModel.available()) {
+            throw BusinessException.badRequest("请先配置模型，再生成回顾");
+        }
+        Long userId = CurrentUser.id();
+        LocalDate today = LocalDate.now();
+        LocalDate weekStart = today.with(DayOfWeek.MONDAY);
+        // 幂等守卫：本周已存在自动生成的周回顾会话则拒绝重复生成
+        Long exists = conversationMapper.selectCount(Wrappers.<Conversation>lambdaQuery()
+                .eq(Conversation::getUserId, userId)
+                .likeRight(Conversation::getTitle, TodoServiceImpl.AUTO_REVIEW_TITLE_PREFIX)
+                .ge(Conversation::getCreatedAt, weekStart.atStartOfDay()));
+        if (exists != null && exists > 0) {
+            throw BusinessException.badRequest("本周回顾已生成，请到草稿中心确认");
+        }
+        AssetQueryTools.Listing listing = assetQueryTools.listing(weekStart.toString(), today.toString(), null, null);
+        if (listing.rows().isEmpty()) {
+            throw BusinessException.badRequest("本周还没有新记录，暂时无需回顾");
+        }
+        String prompt = reviewPrompt(listing.text());
+        DraftReply reply = conversationModel.draftReview(prompt);
+        StoredDraft draft = DraftSanitizer.sanitizeReview(reply, listing.text());
+
+        Conversation conversation = new Conversation();
+        conversation.setUserId(userId);
+        conversation.setTitle(TodoServiceImpl.AUTO_REVIEW_TITLE_PREFIX + " · " + weekStart + " ~ " + today);
+        conversation.setStatus(DRAFTED);
+        conversationMapper.insert(conversation);
+        // 回位素材以 review 消息留档，点开会话可见生成依据
+        insertMessage(conversation.getId(), ASSISTANT, TurnSanitizer.REVIEW, listing.text(), null);
+        conversation.setDraftJson(writeJson(draft));
+        touch(conversation);
+        return conversation.getId();
+    }
+
     private ConversationDetailVO sendText(Long id, String text) {
         Conversation conversation = requireOpen(id);
         insertMessage(conversation.getId(), USER, TurnSanitizer.INTERVIEW, text, null);
@@ -577,24 +615,44 @@ public class ConversationServiceImpl implements ConversationService {
         diaryRequest.setTags(draft.getTags());
         DiaryDetailVO diary = diaryService.create(diaryRequest);
 
-        ExperienceCreateRequest experienceRequest = new ExperienceCreateRequest();
-        experienceRequest.setDiaryId(diary.getId());
-        experienceRequest.setTitle(Texts.truncate(draft.getTitle() + " —— 经验提炼", 200));
-        experienceRequest.setProblem(blankToPending(draft.getProblem()));
-        experienceRequest.setCause(blankToPending(draft.getCause()));
-        experienceRequest.setSolution(blankToPending(draft.getSolution()));
-        experienceRequest.setLesson(blankToPending(draft.getLesson()));
-        experienceRequest.setDomain(draft.getDomain());
-        experienceRequest.setTags(draft.getTags());
-        experienceRequest.setKnowledgeIds(mergedIds(acceptedKnowledgeIds(messages), request == null ? null : request.getKnowledgeIds()));
-        experienceRequest.setNewKnowledge(mergedKnowledge(acceptedSupplements(messages), request));
-        ExperienceDetailVO experience = experienceService.create(experienceRequest);
-        experienceService.attachToDiary(diary.getId(), request == null ? null : request.getExperienceIds());
+        // 自动结构化提炼开关：四件套全空（用户关闭提炼时前端会显式传空串）→ 只落日记，不产经验卡
+        boolean withExperience = StringUtils.hasText(draft.getProblem()) || StringUtils.hasText(draft.getCause())
+                || StringUtils.hasText(draft.getSolution()) || StringUtils.hasText(draft.getLesson());
 
         CommitResult result = new CommitResult();
         result.setDiaryId(diary.getId());
-        result.setExperienceId(experience.getId());
-        result.setKnowledgeIds(experience.getKnowledgeIds());
+
+        if (withExperience) {
+            ExperienceCreateRequest experienceRequest = new ExperienceCreateRequest();
+            experienceRequest.setDiaryId(diary.getId());
+            experienceRequest.setTitle(Texts.truncate(draft.getTitle() + " —— 经验提炼", 200));
+            experienceRequest.setProblem(blankToPending(draft.getProblem()));
+            experienceRequest.setCause(blankToPending(draft.getCause()));
+            experienceRequest.setSolution(blankToPending(draft.getSolution()));
+            experienceRequest.setLesson(blankToPending(draft.getLesson()));
+            experienceRequest.setDomain(draft.getDomain());
+            experienceRequest.setTags(draft.getTags());
+            experienceRequest.setKnowledgeIds(mergedIds(acceptedKnowledgeIds(messages), request == null ? null : request.getKnowledgeIds()));
+            experienceRequest.setNewKnowledge(mergedKnowledge(acceptedSupplements(messages), request));
+            ExperienceDetailVO experience = experienceService.create(experienceRequest);
+            experienceService.attachToDiary(diary.getId(), request == null ? null : request.getExperienceIds());
+            result.setExperienceId(experience.getId());
+            result.setKnowledgeIds(experience.getKnowledgeIds());
+        } else {
+            // 无经验载体：用户同意写入的知识候选直接落知识库（独立条目），已有经验仍可挂到日记
+            for (KnowledgeDraftRequest knowledgeDraft : mergedKnowledge(acceptedSupplements(messages), request)) {
+                KnowledgeCreateRequest create = new KnowledgeCreateRequest();
+                create.setTitle(knowledgeDraft.getTitle());
+                create.setCategory(knowledgeDraft.getCategory());
+                create.setDomain(knowledgeDraft.getDomain());
+                create.setSummary(knowledgeDraft.getSummary());
+                create.setContent(knowledgeDraft.getContent());
+                create.setTags(knowledgeDraft.getTags());
+                create.setMastery("待补充");
+                result.getKnowledgeIds().add(knowledgeService.create(create).getId());
+            }
+            experienceService.attachToDiary(diary.getId(), request == null ? null : request.getExperienceIds());
+        }
         return result;
     }
 
@@ -718,6 +776,19 @@ public class ConversationServiceImpl implements ConversationService {
         }
         if (request.getDomain() != null) {
             draft.setDomain(request.getDomain().trim());
+        }
+        // 四件套允许显式清空（自动提炼关闭时前端传空串，提交后不产经验卡）
+        if (request.getProblem() != null) {
+            draft.setProblem(request.getProblem().trim());
+        }
+        if (request.getCause() != null) {
+            draft.setCause(request.getCause().trim());
+        }
+        if (request.getSolution() != null) {
+            draft.setSolution(request.getSolution().trim());
+        }
+        if (request.getLesson() != null) {
+            draft.setLesson(request.getLesson().trim());
         }
         if (request.getTags() != null) {
             draft.setTags(Texts.normalizeTags(request.getTags()));

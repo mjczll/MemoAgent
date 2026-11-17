@@ -30,6 +30,22 @@
               <div class="field grow">
                 <label>日记提醒时间</label>
                 <input v-model="form.reminderTime" class="input" type="time" />
+            </div>
+            <div class="field">
+              <label>每周回顾生成日</label>
+              <select v-model.number="form.reviewDay" class="input">
+                <option :value="0">周日</option>
+                <option :value="1">周一</option>
+                <option :value="2">周二</option>
+                <option :value="3">周三</option>
+                <option :value="4">周四</option>
+                <option :value="5">周五</option>
+                <option :value="6">周六</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>每周回顾生成时间</label>
+              <input v-model="form.reviewTime" class="input" type="time" />
               </div>
             </div>
             <button class="btn primary" @click="saveProfile">保存资料</button>
@@ -44,14 +60,10 @@
               <input v-model="form.autoExtract" type="checkbox" />
             </label>
             <label class="row between" style="cursor: pointer">
-              <span>自动建议关联的知识条目</span>
-              <input v-model="form.autoSuggestKnowledge" type="checkbox" />
-            </label>
-            <label class="row between" style="cursor: pointer">
               <span>每周生成一次回顾</span>
               <input v-model="form.weeklyReview" type="checkbox" />
             </label>
-            <button class="btn primary" @click="saveProfile">保存偏好</button>
+            <button class="btn primary" :disabled="profileSaving" @click="saveProfile">保存偏好</button>
           </div>
         </div>
       </div>
@@ -90,7 +102,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
+import { getProfile, saveProfileApi } from "@/api/profile";
+import { errorMessage } from "@/api/http";
 import { useLibraryStore } from "@/stores/library";
 import { useUiStore, type ProfileSettings } from "@/stores/ui";
 
@@ -100,18 +114,35 @@ const library = useLibraryStore();
 const stats = computed(() => library.stats);
 
 const form = reactive<ProfileSettings>({ ...ui.profile });
+const profileSaving = ref(false);
 
-function saveProfile() {
-  ui.saveProfile({
+onMounted(async () => {
+  await ui.loadProfile();
+  Object.assign(form, ui.profile);
+});
+
+async function saveProfile() {
+  const payload: ProfileSettings = {
     displayName: form.displayName.trim() || "未命名",
     signature: form.signature,
     goalWeekly: Number(form.goalWeekly) > 0 ? Number(form.goalWeekly) : 1,
     reminderTime: form.reminderTime,
+    reviewDay: form.reviewDay,
+    reviewTime: form.reviewTime,
     autoExtract: form.autoExtract,
     autoSuggestKnowledge: form.autoSuggestKnowledge,
     weeklyReview: form.weeklyReview,
-  });
-  ui.toast("设置已保存到本地");
+  };
+  profileSaving.value = true;
+  try {
+    await saveProfileApi(payload);
+    ui.saveProfile(payload);
+    ui.toast("设置已保存");
+  } catch (error) {
+    ui.toast(errorMessage(error, "设置保存失败"), "error");
+  } finally {
+    profileSaving.value = false;
+  }
 }
 
 function exportJson() {

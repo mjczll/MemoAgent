@@ -295,6 +295,11 @@ export function draftConversation(id: number | string): Promise<ConversationDeta
   return request<ConversationDetail>(`/api/conversations/${id}/draft`, { method: "POST" });
 }
 
+/** 待办通知触发：生成本周回顾草稿（独立会话，status=drafted），返回会话 id */
+export function generateWeeklyReview(): Promise<number> {
+  return request<number>("/api/conversations/review/weekly", { method: "POST" });
+}
+
 export function commitConversation(
   id: number | string,
   payload: {

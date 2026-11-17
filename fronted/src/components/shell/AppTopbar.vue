@@ -48,6 +48,9 @@
     </div>
 
     <span class="spacer" />
+
+    <!-- 待办通知小窗：草稿待确认 + 每周回顾待生成 -->
+    <TodoBell />
   </header>
 </template>
 
@@ -58,6 +61,7 @@ import { useInterviewStore } from "@/stores/interview";
 import { useAgentStore } from "@/stores/agent";
 import { useConversationStore } from "@/stores/conversation";
 import { useUiStore } from "@/stores/ui";
+import TodoBell from "@/components/shell/TodoBell.vue";
 import { errorMessage } from "@/api/http";
 
 const props = defineProps<{

@@ -1,6 +1,6 @@
 <template>
   <div class="fade-in">
-    <span class="crumb" @click="router.push('/')">← 返回</span>
+    <span class="crumb" @click="goBack">← 返回</span>
     <div class="page-head">
       <div class="grow">
         <h1 class="h1">整理草稿</h1>
@@ -73,7 +73,7 @@
           </div>
         </div>
 
-        <div v-if="draft.incident" class="panel">
+        <div v-if="draft.incident && autoExtract" class="panel">
           <div class="panel-head"><b>经验</b></div>
           <div class="panel-body stack">
             <div class="field">
@@ -95,7 +95,7 @@
           </div>
         </div>
 
-        <div v-if="draft.incident" class="panel">
+        <div v-if="draft.incident && autoExtract" class="panel">
           <div class="panel-head"><b>相关记录</b></div>
           <div class="panel-body stack" style="gap: 8px">
             <label v-for="item in related" :key="`${item.type}-${item.id}`" class="row" style="align-items: flex-start">
@@ -147,6 +147,16 @@ const loading = ref(true);
 const tagsText = ref("");
 /** 领域可编辑值：初始取草稿自带的领域；职责归经验——这里只是人工修正入口 */
 const domainText = ref("");
+
+/**
+ * 返回来路：从草稿中心进来就回草稿中心，从对话页进来回对话页；
+ * 直链打开（无应用内历史）时兜底到草稿中心——草稿页本来就是它的一部分。
+ */
+function goBack() {
+  const back = window.history.state?.back;
+  if (back) router.back();
+  else router.push("/drafts");
+}
 watch(
   () => store.current?.draft?.domain,
   (value) => {
@@ -169,6 +179,8 @@ function onDomainChange(value: string) {
 const selectedRelated = ref<Record<string, boolean>>({});
 
 const draft = computed(() => store.current?.draft ?? null);
+/** 自动结构化提炼开关（设置页偏好）：关闭时整理只落日记、不产经验卡 */
+const autoExtract = computed(() => ui.profile.autoExtract);
 const saved = computed(() => store.current?.status === "committed");
 const related = computed(() => store.current?.related ?? []);
 
@@ -262,10 +274,10 @@ async function save() {
       content: target.content,
       domain: domainValue.value,
       tags,
-      problem: target.problem,
-      cause: target.cause,
-      solution: target.solution,
-      lesson: target.lesson,
+      problem: autoExtract.value ? target.problem : "",
+      cause: autoExtract.value ? target.cause : "",
+      solution: autoExtract.value ? target.solution : "",
+      lesson: autoExtract.value ? target.lesson : "",
       knowledgeIds,
       experienceIds,
     });

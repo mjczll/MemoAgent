@@ -219,3 +219,27 @@ export interface ToastItem {
 }
 
 export type ThemeName = "dark";
+
+/** 个人偏好（阶段 8.2，后端 profile） */
+export interface ProfileSettings {
+  displayName: string;
+  signature: string;
+  goalWeekly: number;
+  reminderTime: string;
+  /** 每周回顾触发日：0=周日 1=周一 ... 6=周六 */
+  reviewDay: number;
+  /** 每周回顾触发时间 HH:mm */
+  reviewTime: string;
+  autoExtract: boolean;
+  autoSuggestKnowledge: boolean;
+  weeklyReview: boolean;
+}
+
+/** 待办通知项（查询式动态计算，见 GET /api/todos） */
+export interface TodoItem {
+  type: "weekly-review" | "drafts";
+  title: string;
+  description: string;
+  scheduledAt?: string;
+  count?: number;
+}

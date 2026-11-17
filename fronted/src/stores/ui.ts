@@ -1,5 +1,6 @@
 import { defineStore } from "pinia";
-import type { ToastItem } from "@/types";
+import type { ProfileSettings, ToastItem } from "@/types";
+import { getProfile } from "@/api/profile";
 import { uid } from "@/lib/format";
 
 type ThemeName = "dark";
@@ -7,21 +8,15 @@ type ThemeName = "dark";
 const SIDEBAR_KEY = "memoagent:sidebar";
 const PROFILE_KEY = "memoagent:profile";
 
-export interface ProfileSettings {
-  displayName: string;
-  signature: string;
-  goalWeekly: number;
-  reminderTime: string;
-  autoExtract: boolean;
-  autoSuggestKnowledge: boolean;
-  weeklyReview: boolean;
-}
+export type { ProfileSettings } from "@/types";
 
 const DEFAULT_PROFILE: ProfileSettings = {
   displayName: "阿七",
   signature: "把每一次踩坑都变成可复用的经验",
   goalWeekly: 5,
   reminderTime: "21:30",
+  reviewDay: 0,
+  reviewTime: "21:30",
   autoExtract: true,
   autoSuggestKnowledge: true,
   weeklyReview: true,
@@ -57,6 +52,28 @@ export const useUiStore = defineStore("ui", {
       }
       this.applyTheme();
       this.hydrated = true;
+      // 偏好以后端为准（阶段 8.2），失败时保留 localStorage 缓存值
+      void this.loadProfile();
+    },
+
+    async loadProfile() {
+      try {
+        const remote = await getProfile();
+        this.profile = {
+          displayName: remote.displayName || this.profile.displayName,
+          signature: remote.signature ?? this.profile.signature,
+          goalWeekly: remote.goalWeekly > 0 ? remote.goalWeekly : this.profile.goalWeekly,
+          reminderTime: remote.reminderTime ?? this.profile.reminderTime,
+          reviewDay: typeof remote.reviewDay === "number" ? remote.reviewDay : this.profile.reviewDay,
+          reviewTime: remote.reviewTime || this.profile.reviewTime,
+          autoExtract: remote.autoExtract,
+          autoSuggestKnowledge: remote.autoSuggestKnowledge,
+          weeklyReview: remote.weeklyReview,
+        };
+        localStorage.setItem(PROFILE_KEY, JSON.stringify(this.profile));
+      } catch {
+        // 后端不可用时静默保留本地值
+      }
     },
 
     applyTheme() {

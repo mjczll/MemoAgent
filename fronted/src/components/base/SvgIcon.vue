@@ -15,6 +15,7 @@ type IconName =
   | "graph"
   | "search"
   | "settings"
+  | "drafts"
   | "rail-toggle"
   | "rail-collapse"
   | "rail-expand";
@@ -86,6 +87,14 @@ const px = computed(() =>
     <g v-else-if="name === 'search'" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
       <circle cx="7" cy="7" r="4.2" />
       <path d="m10.3 10.3 3 3" />
+    </g>
+
+    <!-- drafts：收件托盘 + 落入箭头（待确认的草稿汇入） -->
+    <g v-else-if="name === 'drafts'" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M8 1.8v4.4" />
+      <path d="M6 4.2 8 6.2l2-2" />
+      <path d="M2.6 8.4h3.1l1.1 1.8h2.4l1.1-1.8h3.1" />
+      <path d="M13.4 8.4v3a1.6 1.6 0 0 1-1.6 1.6H4.2a1.6 1.6 0 0 1-1.6-1.6v-3" />
     </g>
 
     <!-- settings：经典齿轮（8 个梯形齿 + 中心孔） -->

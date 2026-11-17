@@ -66,9 +66,9 @@
           class="list-row"
           @click="router.push(`/diaries/${item.id}`)"
         >
-          <span class="tag accent origin-corner">{{ originLabel(item.origin) }}</span>
           <div class="title">
             <b>{{ item.title }}</b>
+            <span class="tag accent origin-inline">{{ originLabel(item.origin) }}</span>
           </div>
           <div class="meta">
             <span>{{ item.date }}</span>
@@ -213,21 +213,19 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-/* 来源徽标钉在每条日记的右上角 */
-.list-row {
-  position: relative;
-}
-
-.origin-corner {
-  position: absolute;
-  top: 14px;
-  right: 16px;
+/* 来源徽标紧跟标题文字 */
+.origin-inline {
+  margin-left: 8px;
+  vertical-align: 2px;
   white-space: nowrap;
 }
 
-/* 标题给右上角徽标让位；类型徽标紧跟标题文字，长标题时才省略 */
+/* 标题 + 徽标同一行，超长时标题省略 */
 .list-row .title {
-  padding-right: 88px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
 }
 
 .list-row .title b {
@@ -236,5 +234,9 @@ onMounted(async () => {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+.list-row .title .origin-inline {
+  flex: 0 0 auto;
 }
 </style>

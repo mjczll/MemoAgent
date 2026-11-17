@@ -161,7 +161,7 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", onDocPointerDo
 interface NavItem {
   to: string;
   label: string;
-  icon: "home" | "interview" | "agent" | "diary" | "experience" | "knowledge" | "graph" | "search" | "settings";
+  icon: "home" | "interview" | "agent" | "diary" | "experience" | "knowledge" | "graph" | "search" | "settings" | "drafts";
 }
 
 const mainNav = computed<NavItem[]>(() => [
@@ -174,14 +174,21 @@ const assetNav = computed<NavItem[]>(() => [
   { to: "/knowledge", label: "知识库", icon: "knowledge" },
   { to: "/graph", label: "关系图谱", icon: "graph" },
   { to: "/search", label: "搜索", icon: "search" },
+  { to: "/drafts", label: "草稿中心", icon: "drafts" },
 ]);
 
 function isActive(item: { to: string }): boolean {
   if (item.to === "/") return route.path === "/";
+  // 草稿确认页路由挂在日记命名空间下（/diaries/draft/:id），但语义属于草稿中心
+  if (item.to === "/drafts") {
+    return route.path === "/drafts" || route.path.startsWith("/diaries/draft/");
+  }
   if (item.to === "/diaries") {
     return (
       route.path === "/diaries" ||
-      (route.path.startsWith("/diaries/") && route.path !== "/diaries/new")
+      (route.path.startsWith("/diaries/") &&
+        route.path !== "/diaries/new" &&
+        !route.path.startsWith("/diaries/draft/"))
     );
   }
   return route.path === item.to || route.path.startsWith(`${item.to}/`);

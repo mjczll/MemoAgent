@@ -26,6 +26,14 @@ public interface ConversationService {
 
     ConversationListItemVO pin(Long id, boolean pinned);
 
+    /**
+     * 生成本周回顾（待办通知触发，非定时自动执行）：取本周记录清单 → 生成复盘草稿 →
+     * 存为独立会话（status=drafted），用户在草稿页确认提交。
+     *
+     * @return 新建的回顾会话 id
+     */
+    Long generateWeeklyReview();
+
     ConversationDetailVO send(Long id, ConversationMessageRequest request);
 
     SseEmitter stream(Long id, String text);
