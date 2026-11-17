@@ -17,7 +17,6 @@ import org.springframework.util.StringUtils;
 public class ProfileServiceImpl implements ProfileService {
 
     private static final String DEFAULT_DISPLAY_NAME = "未命名";
-    private static final int DEFAULT_GOAL_WEEKLY = 5;
     private static final int DEFAULT_REVIEW_DAY = 0;
     private static final String DEFAULT_REVIEW_TIME = "21:30";
 
@@ -49,12 +48,9 @@ public class ProfileServiceImpl implements ProfileService {
         profile.setUserId(userId);
         profile.setDisplayName(DEFAULT_DISPLAY_NAME);
         profile.setSignature("");
-        profile.setGoalWeekly(DEFAULT_GOAL_WEEKLY);
-        profile.setReminderTime("");
         profile.setReviewDay(DEFAULT_REVIEW_DAY);
         profile.setReviewTime(DEFAULT_REVIEW_TIME);
         profile.setAutoExtract(true);
-        profile.setAutoSuggestKnowledge(true);
         profile.setWeeklyReview(true);
         profileMapper.insert(profile);
         return profile;
@@ -70,12 +66,6 @@ public class ProfileServiceImpl implements ProfileService {
         if (request.getSignature() != null) {
             profile.setSignature(request.getSignature().trim());
         }
-        if (request.getGoalWeekly() != null && request.getGoalWeekly() > 0) {
-            profile.setGoalWeekly(request.getGoalWeekly());
-        }
-        if (request.getReminderTime() != null) {
-            profile.setReminderTime(request.getReminderTime().trim());
-        }
         if (request.getReviewDay() != null) {
             int day = Math.max(0, Math.min(request.getReviewDay(), 6));
             profile.setReviewDay(day);
@@ -86,9 +76,6 @@ public class ProfileServiceImpl implements ProfileService {
         if (request.getAutoExtract() != null) {
             profile.setAutoExtract(request.getAutoExtract());
         }
-        if (request.getAutoSuggestKnowledge() != null) {
-            profile.setAutoSuggestKnowledge(request.getAutoSuggestKnowledge());
-        }
         if (request.getWeeklyReview() != null) {
             profile.setWeeklyReview(request.getWeeklyReview());
         }
@@ -98,12 +85,9 @@ public class ProfileServiceImpl implements ProfileService {
         ProfileVO vo = new ProfileVO();
         vo.setDisplayName(profile.getDisplayName());
         vo.setSignature(profile.getSignature());
-        vo.setGoalWeekly(profile.getGoalWeekly());
-        vo.setReminderTime(profile.getReminderTime());
         vo.setReviewDay(profile.getReviewDay() == null ? DEFAULT_REVIEW_DAY : profile.getReviewDay());
         vo.setReviewTime(StringUtils.hasText(profile.getReviewTime()) ? profile.getReviewTime() : DEFAULT_REVIEW_TIME);
         vo.setAutoExtract(Boolean.TRUE.equals(profile.getAutoExtract()));
-        vo.setAutoSuggestKnowledge(Boolean.TRUE.equals(profile.getAutoSuggestKnowledge()));
         vo.setWeeklyReview(Boolean.TRUE.equals(profile.getWeeklyReview()));
         return vo;
     }

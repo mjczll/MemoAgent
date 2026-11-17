@@ -10,17 +10,11 @@ public class ProfileUpdateRequest {
 
     private String signature;
 
-    private Integer goalWeekly;
-
-    private String reminderTime;
-
     private Integer reviewDay;
 
     private String reviewTime;
 
     private Boolean autoExtract;
-
-    private Boolean autoSuggestKnowledge;
 
     private Boolean weeklyReview;
 }

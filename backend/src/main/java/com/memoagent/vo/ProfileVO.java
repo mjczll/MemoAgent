@@ -10,10 +10,6 @@ public class ProfileVO {
 
     private String signature;
 
-    private Integer goalWeekly;
-
-    private String reminderTime;
-
     /** 每周回顾触发日：0=周日 1=周一 ... 6=周六 */
     private Integer reviewDay;
 
@@ -21,8 +17,6 @@ public class ProfileVO {
     private String reviewTime;
 
     private Boolean autoExtract;
-
-    private Boolean autoSuggestKnowledge;
 
     private Boolean weeklyReview;
 }

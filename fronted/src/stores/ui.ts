@@ -13,12 +13,9 @@ export type { ProfileSettings } from "@/types";
 const DEFAULT_PROFILE: ProfileSettings = {
   displayName: "阿七",
   signature: "把每一次踩坑都变成可复用的经验",
-  goalWeekly: 5,
-  reminderTime: "21:30",
   reviewDay: 0,
   reviewTime: "21:30",
   autoExtract: true,
-  autoSuggestKnowledge: true,
   weeklyReview: true,
 };
 
@@ -62,12 +59,9 @@ export const useUiStore = defineStore("ui", {
         this.profile = {
           displayName: remote.displayName || this.profile.displayName,
           signature: remote.signature ?? this.profile.signature,
-          goalWeekly: remote.goalWeekly > 0 ? remote.goalWeekly : this.profile.goalWeekly,
-          reminderTime: remote.reminderTime ?? this.profile.reminderTime,
           reviewDay: typeof remote.reviewDay === "number" ? remote.reviewDay : this.profile.reviewDay,
           reviewTime: remote.reviewTime || this.profile.reviewTime,
           autoExtract: remote.autoExtract,
-          autoSuggestKnowledge: remote.autoSuggestKnowledge,
           weeklyReview: remote.weeklyReview,
         };
         localStorage.setItem(PROFILE_KEY, JSON.stringify(this.profile));

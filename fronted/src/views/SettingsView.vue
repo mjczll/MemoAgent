@@ -76,7 +76,6 @@
               </div>
             </div>
 
-            <button class="btn sm block" @click="exportJson">导出全部数据（JSON）</button>
             <button class="btn sm block" :disabled="obsidianBusy" @click="exportObsidianZip">
               导出 Markdown 包（{{ obsidian.total }} 篇）
             </button>
@@ -257,12 +256,9 @@ async function saveProfile() {
   const payload: ProfileSettings = {
     displayName: form.displayName.trim() || "未命名",
     signature: form.signature,
-    goalWeekly: Number(form.goalWeekly) > 0 ? Number(form.goalWeekly) : 1,
-    reminderTime: form.reminderTime,
     reviewDay: form.reviewDay,
     reviewTime: form.reviewTime,
     autoExtract: form.autoExtract,
-    autoSuggestKnowledge: form.autoSuggestKnowledge,
     weeklyReview: form.weeklyReview,
   };
   profileSaving.value = true;
@@ -275,26 +271,6 @@ async function saveProfile() {
   } finally {
     profileSaving.value = false;
   }
-}
-
-function exportJson() {
-  const payload = {
-    exportedAt: new Date().toISOString(),
-    profile: ui.profile,
-    diaries: library.diaries,
-    experiences: library.experiences,
-    knowledge: library.knowledge,
-  };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], {
-    type: "application/json;charset=utf-8",
-  });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = `memoagent-export-${new Date().toISOString().slice(0, 10)}.json`;
-  anchor.click();
-  URL.revokeObjectURL(url);
-  ui.toast("已导出当前浏览器数据");
 }
 
 async function resetSeed() {
