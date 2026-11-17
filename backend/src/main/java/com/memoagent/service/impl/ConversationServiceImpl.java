@@ -42,6 +42,7 @@ import com.memoagent.mapper.ConversationMapper;
 import com.memoagent.mapper.ConversationMessageMapper;
 import com.memoagent.service.ConversationService;
 import com.memoagent.service.DiaryService;
+import com.memoagent.service.TodoStreamService;
 import com.memoagent.service.ExperienceService;
 import com.memoagent.service.KnowledgeService;
 import com.memoagent.vector.VectorSourceTypes;
@@ -94,6 +95,7 @@ public class ConversationServiceImpl implements ConversationService {
     private final DiaryService diaryService;
     private final ExperienceService experienceService;
     private final KnowledgeService knowledgeService;
+    private final TodoStreamService todoStreamService;
     private final ObjectMapper objectMapper;
 
     @Override
@@ -155,6 +157,7 @@ public class ConversationServiceImpl implements ConversationService {
     public void delete(Long id) {
         requireOwned(id);
         conversationMapper.deleteById(id);
+        todoStreamService.notifyChanged();
     }
 
     @Override
@@ -335,6 +338,7 @@ public class ConversationServiceImpl implements ConversationService {
         conversation.setDraftJson(writeJson(draft));
         conversation.setStatus(DRAFTED);
         touch(conversation);
+        todoStreamService.notifyAfterCommit();
         return detail(conversation);
     }
 
@@ -356,6 +360,7 @@ public class ConversationServiceImpl implements ConversationService {
         conversation.setDraftJson(writeJson(draft));
         conversation.setStatus(DRAFTED);
         touch(conversation);
+        todoStreamService.notifyAfterCommit();
         return detail(conversation);
     }
 
@@ -382,6 +387,7 @@ public class ConversationServiceImpl implements ConversationService {
         conversation.setCommittedDiaryId(result.getDiaryId());
         conversation.setStatus(COMMITTED);
         touch(conversation);
+        todoStreamService.notifyAfterCommit();
         return result;
     }
 
@@ -419,6 +425,7 @@ public class ConversationServiceImpl implements ConversationService {
         insertMessage(conversation.getId(), ASSISTANT, TurnSanitizer.REVIEW, listing.text(), null);
         conversation.setDraftJson(writeJson(draft));
         touch(conversation);
+        todoStreamService.notifyAfterCommit();
         return conversation.getId();
     }
 
@@ -1018,10 +1025,19 @@ public class ConversationServiceImpl implements ConversationService {
         vo.setCommittedDiaryId(conversation.getCommittedDiaryId());
         vo.setUpdatedAt(conversation.getUpdatedAt());
         vo.setMessages(messages(conversation.getId()).stream().map(this::toMessage).toList());
-        if (vo.getDraft() != null) {
-            vo.setRelated(conversationRecall.find(String.join("\n", DraftSanitizer.storyLines(userLines(conversation.getId())))));
-        }
+        // 「相关记录」召回已拆到 related(id) 独立端点：语义检索要过一次 embedding，
+        // 留在这里会把详情首屏拖慢一个数量级，前端异步补齐面板。
         return vo;
+    }
+
+    @Override
+    public List<RecallHit> related(Long id) {
+        Conversation conversation = requireOwned(id);
+        if (readDraft(conversation.getDraftJson()) == null) {
+            return List.of();
+        }
+        return conversationRecall.find(
+                String.join("\n", DraftSanitizer.storyLines(userLines(conversation.getId()))));
     }
 
     private ConversationListItemVO toListItem(Conversation conversation) {

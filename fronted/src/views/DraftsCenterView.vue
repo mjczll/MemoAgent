@@ -11,7 +11,6 @@
           }}
         </p>
       </div>
-      <button class="btn" :disabled="loading" @click="load">刷新</button>
     </div>
 
     <div class="panel">
@@ -29,7 +28,7 @@
 
       <div v-if="error" class="panel-body">
         <EmptyState icon="⚠" title="草稿加载失败" :hint="error">
-          <button class="btn primary sm" @click="load">重试</button>
+          <button class="btn primary sm" @click="load()">重试</button>
         </EmptyState>
       </div>
       <div v-else class="list">
@@ -62,8 +61,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
-import { useRouter } from "vue-router";
+import { computed, onMounted, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { errorMessage } from "@/api/http";
 import { useConversationStore } from "@/stores/conversation";
 import type { ConversationListItem } from "@/api/conversation";
@@ -72,6 +71,7 @@ import { relative } from "@/lib/format";
 import { AUTO_REVIEW_TITLE_PREFIX } from "@/lib/constants";
 
 const router = useRouter();
+const route = useRoute();
 const conversations = useConversationStore();
 
 const loading = ref(false);
@@ -89,19 +89,27 @@ function sourceLabel(item: ConversationListItem) {
   return isAutoReview(item) ? "来自每周回顾待办" : "来自对话整理";
 }
 
-async function load() {
-  loading.value = true;
-  error.value = "";
+async function load(silent = false) {
+  if (!silent) loading.value = true;
   try {
     await conversations.refresh();
+    error.value = "";
   } catch (err) {
-    error.value = errorMessage(err, "草稿列表加载失败");
+    if (!silent) error.value = errorMessage(err, "草稿列表加载失败");
   } finally {
-    loading.value = false;
+    if (!silent) loading.value = false;
   }
 }
 
-onMounted(load);
+// 列表无需手动刷新：从草稿页（确认提交 / 删除后）回来、或从其它页面切回时自动重载
+watch(
+  () => route.fullPath,
+  () => {
+    if (route.name === "drafts") load(true);
+  },
+);
+
+onMounted(() => load());
 </script>
 
 <style scoped>

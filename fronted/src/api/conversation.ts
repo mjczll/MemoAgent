@@ -106,6 +106,11 @@ export function getConversation(id: number | string): Promise<ConversationDetail
   return request<ConversationDetail>(`/api/conversations/${id}`);
 }
 
+/** 草稿「相关记录」召回：语义检索较慢，独立于详情接口由页面异步加载。 */
+export function fetchRelated(id: number | string): Promise<RecallHit[]> {
+  return request<RecallHit[]>(`/api/conversations/${id}/related`);
+}
+
 export function deleteConversation(id: number | string): Promise<void> {
   return request<null>(`/api/conversations/${id}`, { method: "DELETE" }).then(() => undefined);
 }

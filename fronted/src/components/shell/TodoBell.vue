@@ -21,8 +21,6 @@
       <div v-if="open" class="todo-panel">
         <div class="todo-head">
           <b>待办通知</b>
-          <span class="spacer" />
-          <button class="todo-refresh" :disabled="loading" @click="load">{{ loading ? "刷新中…" : "刷新" }}</button>
         </div>
 
         <div v-if="error" class="todo-body todo-faint">加载失败：{{ error }}</div>
@@ -70,7 +68,7 @@
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { errorMessage } from "@/api/http";
-import { fetchTodos } from "@/api/todos";
+import { fetchTodos, subscribeTodos } from "@/api/todos";
 import { generateWeeklyReview } from "@/api/conversation";
 import { useUiStore } from "@/stores/ui";
 import type { TodoItem } from "@/types";
@@ -140,7 +138,9 @@ function onOutside(e: MouseEvent) {
   }
 }
 
-// 路由切换时静默刷新角标（待办是查询式动态计算的，到点即出现）
+// 待办实时性：SSE 推送为主（后端在草稿生成/提交/删除/回顾生成的事务提交后、
+// 以及每周回顾到点时广播 todos-changed），路由切换刷新作为兜底；
+// 收到推送后静默拉一次全量
 watch(
   () => route.fullPath,
   () => {
@@ -148,13 +148,17 @@ watch(
   },
 );
 
+let closeStream: (() => void) | undefined;
+
 onMounted(() => {
   document.addEventListener("mousedown", onOutside);
   load(true);
+  closeStream = subscribeTodos(() => load(true));
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener("mousedown", onOutside);
+  closeStream?.();
 });
 </script>
 
@@ -217,21 +221,6 @@ onBeforeUnmount(() => {
   padding: 10px 14px;
   border-bottom: 1px solid var(--line);
   font-size: 13px;
-}
-.todo-refresh {
-  border: none;
-  background: none;
-  color: var(--mute);
-  font-size: 12px;
-  cursor: pointer;
-  padding: 2px 4px;
-}
-.todo-refresh:hover:not(:disabled) {
-  color: var(--accent);
-}
-.todo-refresh:disabled {
-  opacity: 0.6;
-  cursor: default;
 }
 .todo-body {
   padding: 14px;

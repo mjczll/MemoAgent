@@ -102,7 +102,8 @@
               <input v-model="selectedRelated[relationKey(item)]" type="checkbox" />
               <span class="small">{{ relationLabel(item.type) }} · {{ item.title }}</span>
             </label>
-            <p v-if="!related.length" class="small faint">没有对上已有的日记、经验或知识。保存后只会留下这次新写的日记和经验。</p>
+            <p v-if="relatedLoading" class="small faint">正在查找相关记录…</p>
+            <p v-else-if="!related.length" class="small faint">没有对上已有的日记、经验或知识。保存后只会留下这次新写的日记和经验。</p>
           </div>
         </div>
 
@@ -130,7 +131,7 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { errorMessage } from "@/api/http";
-import type { RecallHit } from "@/api/conversation";
+import { fetchRelated, type RecallHit } from "@/api/conversation";
 import EmptyState from "@/components/base/EmptyState.vue";
 import MarkdownView from "@/components/base/MarkdownView.vue";
 import SuggestCombo from "@/components/base/SuggestCombo.vue";
@@ -182,7 +183,10 @@ const draft = computed(() => store.current?.draft ?? null);
 /** 自动结构化提炼开关（设置页偏好）：关闭时整理只落日记、不产经验卡 */
 const autoExtract = computed(() => ui.profile.autoExtract);
 const saved = computed(() => store.current?.status === "committed");
-const related = computed(() => store.current?.related ?? []);
+/** 相关记录由独立接口异步加载（语义召回要过 embedding 模型，不能挡详情首屏） */
+const relatedList = ref<RecallHit[]>([]);
+const relatedLoading = ref(false);
+const related = computed(() => relatedList.value);
 
 function relationKey(item: RecallHit) {
   return `${item.type}:${item.id}`;
@@ -224,19 +228,39 @@ watch(
 );
 
 onMounted(async () => {
+  // Pinia 的 current 是全局残留：不清掉的话，新草稿加载完成前会先渲染出上一份草稿
+  store.current = null;
+  // 资产列表只在保存时做关联回填用，不该挡住草稿渲染：与 open 并行、失败不阻塞
+  const hydratePromise = library.hydrate().catch(() => undefined);
+  const id = String(route.params.id ?? "");
   try {
-    await library.hydrate();
-    await store.open(String(route.params.id ?? ""));
+    await store.open(id);
   } catch (error) {
     ui.toast(errorMessage(error, "草稿加载失败"), "error");
   } finally {
     loading.value = false;
   }
+  loadRelated(id);
+  await hydratePromise;
 });
+
+/** 相关记录异步补齐：失败静默，面板回落到「没有对上」文案 */
+function loadRelated(id: string) {
+  relatedLoading.value = true;
+  fetchRelated(id)
+    .then((hits) => {
+      relatedList.value = hits;
+    })
+    .catch(() => undefined)
+    .finally(() => {
+      relatedLoading.value = false;
+    });
+}
 
 async function regenerate() {
   try {
     await store.draft();
+    if (store.current) loadRelated(String(store.current.id));
     ui.toast("已按最新对话重新整理");
   } catch (error) {
     ui.toast(errorMessage(error, "整理失败"), "error");

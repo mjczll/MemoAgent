@@ -4,7 +4,7 @@
       <div class="grow">
         <h1 class="h1">设置</h1>
         <p class="lede" style="margin-bottom: 0">
-          日记、经验、知识已接入后端；个人资料仍保存在浏览器本地。
+          日记、经验、知识与个人偏好均已接入后端；回顾排期到点后会出现在顶栏待办。
         </p>
       </div>
     </div>
@@ -12,43 +12,36 @@
     <div class="split left-wide">
       <div class="stack">
         <div class="panel">
-          <div class="panel-head"><b>个人资料</b></div>
+          <div class="panel-head"><b>每周回顾</b></div>
           <div class="panel-body stack" style="gap: 12px">
-            <div class="field">
-              <label>昵称</label>
-              <input v-model="form.displayName" class="input" placeholder="你的昵称" />
-            </div>
-            <div class="field">
-              <label>个人签名</label>
-              <input v-model="form.signature" class="input" placeholder="一句话描述你的知识态度" />
-            </div>
-            <div class="row" style="gap: 12px">
-              <div class="field grow">
-                <label>每周目标（篇）</label>
-                <input v-model.number="form.goalWeekly" class="input" type="number" min="1" />
+            <label class="row between" style="cursor: pointer">
+              <span>每周生成一次回顾</span>
+              <input v-model="form.weeklyReview" type="checkbox" />
+            </label>
+            <template v-if="form.weeklyReview">
+              <div class="row" style="gap: 12px">
+                <div class="field grow">
+                  <label>回顾生成日</label>
+                  <select v-model.number="form.reviewDay" class="input">
+                    <option :value="0">周日</option>
+                    <option :value="1">周一</option>
+                    <option :value="2">周二</option>
+                    <option :value="3">周三</option>
+                    <option :value="4">周四</option>
+                    <option :value="5">周五</option>
+                    <option :value="6">周六</option>
+                  </select>
+                </div>
+                <div class="field grow">
+                  <label>生成时间</label>
+                  <input v-model="form.reviewTime" class="input" type="time" />
+                </div>
               </div>
-              <div class="field grow">
-                <label>日记提醒时间</label>
-                <input v-model="form.reminderTime" class="input" type="time" />
-            </div>
-            <div class="field">
-              <label>每周回顾生成日</label>
-              <select v-model.number="form.reviewDay" class="input">
-                <option :value="0">周日</option>
-                <option :value="1">周一</option>
-                <option :value="2">周二</option>
-                <option :value="3">周三</option>
-                <option :value="4">周四</option>
-                <option :value="5">周五</option>
-                <option :value="6">周六</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>每周回顾生成时间</label>
-              <input v-model="form.reviewTime" class="input" type="time" />
-              </div>
-            </div>
-            <button class="btn primary" @click="saveProfile">保存资料</button>
+              <p class="small faint" style="margin: 0">
+                到点后不会自动生成：顶栏待办会出现「本周回顾待生成」，由你确认后一键生成回顾草稿。
+              </p>
+            </template>
+            <button class="btn primary" :disabled="profileSaving" @click="saveProfile">保存偏好</button>
           </div>
         </div>
 
@@ -58,10 +51,6 @@
             <label class="row between" style="cursor: pointer">
               <span>采访结束后自动结构化提炼（问题 / 原因 / 方案 / 经验）</span>
               <input v-model="form.autoExtract" type="checkbox" />
-            </label>
-            <label class="row between" style="cursor: pointer">
-              <span>每周生成一次回顾</span>
-              <input v-model="form.weeklyReview" type="checkbox" />
             </label>
             <button class="btn primary" :disabled="profileSaving" @click="saveProfile">保存偏好</button>
           </div>

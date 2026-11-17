@@ -6,6 +6,7 @@ import com.memoagent.entity.Conversation;
 import com.memoagent.entity.ConversationMessage;
 import com.memoagent.mapper.ConversationMapper;
 import com.memoagent.mapper.ConversationMessageMapper;
+import com.memoagent.service.impl.TodoServiceImpl;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
@@ -46,9 +47,10 @@ public class ConversationTitleService {
     /**
      * 标题上限。20 字会误杀「热点Key过期引发的缓存击穿故障排查与优化总结」这类
      * 内容正确但偏长的标题——丢掉一个好标题，代价是这条会话永远停在「新对话」。
-     * 现在放宽到 24，更长的截断而不是丢弃。
+     * 24 字仍会把「昨天线上出了一个问题，晚上八点多接口开始大量超时，想问问大家怎么排查」
+     * 截成半句（草稿中心列表有整行空间展示，2026-11-17 再放宽到 40）。
      */
-    private static final int MAX_TITLE_CHARS = 24;
+    private static final int MAX_TITLE_CHARS = 40;
 
     /** 一眼能看出是「照抄原话」的下限：太短的同名片段不算抄袭（例如「缓存」）。 */
     private static final int COPY_CHECK_CHARS = 6;
@@ -140,8 +142,55 @@ public class ConversationTitleService {
         }
     }
 
+    /**
+     * 强制重新生成标题（覆盖已有标题）。用于修复历史上被旧上限截断的标题：
+     * 原话还在消息表里，重新起一个即可。周回顾等结构化标题不参与。
+     */
+    @Async("titleExecutor")
+    public void regenerate(Long conversationId) {
+        try {
+            Conversation conversation = conversationMapper.selectById(conversationId);
+            if (conversation == null) {
+                return;
+            }
+            if (conversation.getTitle() != null
+                    && conversation.getTitle().startsWith(TodoServiceImpl.AUTO_REVIEW_TITLE_PREFIX)) {
+                log.info("会话 #{} 是自动回顾，标题不重新生成", conversationId);
+                return;
+            }
+            List<ConversationMessage> messages = messageMapper.selectList(
+                    Wrappers.<ConversationMessage>lambdaQuery()
+                            .eq(ConversationMessage::getConversationId, conversationId)
+                            .orderByAsc(ConversationMessage::getId)
+                            .last("limit 6"));
+            String question = firstByRole(messages, "user");
+            String answer = firstByRole(messages, "assistant");
+            if (!StringUtils.hasText(question) || !StringUtils.hasText(answer)) {
+                log.info("会话 #{} 缺少一问一答，跳过重新起标题", conversationId);
+                return;
+            }
+            String raw = CompletableFuture
+                    .supplyAsync(() -> conversationModel.title(prompt(question, answer)))
+                    .get(TITLE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            String title = sanitize(raw, question);
+            if (title == null) {
+                log.info("会话 #{} 重起标题未通过校验，保留原标题：{}", conversationId, conversation.getTitle());
+                return;
+            }
+            conversationMapper.update(null, Wrappers.<Conversation>lambdaUpdate()
+                    .eq(Conversation::getId, conversationId)
+                    .set(Conversation::getTitle, title));
+            log.info("会话标题已重起：#{} {} → {}", conversationId, conversation.getTitle(), title);
+            titleStream.publish(conversationId, title);
+        } catch (Exception exception) {
+            log.warn("会话 #{} 重起标题失败，保留原标题", conversationId, exception);
+        }
+    }
+
     private String prompt(String question, String answer) {
-        return "用户说：\n" + Texts.truncate(question, MAX_INPUT_CHARS)
+        return "根据下面这段对话起一个标题：概括聊了什么，不超过 40 个字，\n"
+                + "直接输出标题本身——不要引号、不要解释、不要问号。\n\n"
+                + "用户说：\n" + Texts.truncate(question, MAX_INPUT_CHARS)
                 + "\n\n助手回复：\n" + Texts.truncate(answer, MAX_INPUT_CHARS);
     }
 

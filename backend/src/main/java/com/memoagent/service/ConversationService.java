@@ -1,6 +1,7 @@
 package com.memoagent.service;
 
 import com.memoagent.conversation.CommitResult;
+import com.memoagent.conversation.RecallHit;
 import com.memoagent.dto.ConversationChoiceRequest;
 import com.memoagent.dto.ConversationCommitRequest;
 import com.memoagent.dto.ConversationCreateRequest;
@@ -18,6 +19,12 @@ public interface ConversationService {
     List<ConversationListItemVO> list();
 
     ConversationDetailVO get(Long id);
+
+    /**
+     * 草稿「相关记录」召回（语义检索，需调一次 embedding）。独立于 get：
+     * 召回耗时远高于普通 SQL，拆开后详情首屏不被拖慢，前端异步补齐面板。
+     */
+    List<RecallHit> related(Long id);
 
     void delete(Long id);
 

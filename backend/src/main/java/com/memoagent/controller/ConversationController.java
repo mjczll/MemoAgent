@@ -2,7 +2,9 @@ package com.memoagent.controller;
 
 import com.memoagent.common.Result;
 import com.memoagent.conversation.CommitResult;
+import com.memoagent.conversation.ConversationTitleService;
 import com.memoagent.conversation.ConversationTitleStream;
+import com.memoagent.conversation.RecallHit;
 import com.memoagent.dto.ConversationChoiceRequest;
 import com.memoagent.dto.ConversationCommitRequest;
 import com.memoagent.dto.ConversationCreateRequest;
@@ -33,6 +35,7 @@ public class ConversationController {
 
     private final ConversationService conversationService;
     private final ConversationTitleStream conversationTitleStream;
+    private final ConversationTitleService conversationTitleService;
 
     @PostMapping
     public Result<ConversationDetailVO> create(@RequestBody(required = false) ConversationCreateRequest request) {
@@ -55,6 +58,12 @@ public class ConversationController {
         return Result.ok(conversationService.get(id));
     }
 
+    /** 草稿页「相关记录」召回：语义检索要过一次 embedding，独立端点让详情首屏不被拖慢。 */
+    @GetMapping("/{id}/related")
+    public Result<List<RecallHit>> related(@PathVariable Long id) {
+        return Result.ok(conversationService.related(id));
+    }
+
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable Long id) {
         conversationService.delete(id);
@@ -68,6 +77,13 @@ public class ConversationController {
     @GetMapping("/{id}/title/stream")
     public SseEmitter titleStream(@PathVariable Long id) {
         return conversationTitleStream.subscribe(id);
+    }
+
+    /** 强制重新生成标题：用于修复历史上被旧上限截断的标题（原话仍在消息表里）。 */
+    @PostMapping("/{id}/title/regenerate")
+    public Result<Void> regenerateTitle(@PathVariable Long id) {
+        conversationTitleService.regenerate(id);
+        return Result.ok(null);
     }
 
     /** 重命名。只改标题，不刷新更新时间。 */
