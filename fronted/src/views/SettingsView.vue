@@ -77,6 +77,44 @@
             </div>
 
             <button class="btn sm block" @click="exportJson">导出全部数据（JSON）</button>
+            <button class="btn sm block" :disabled="obsidianBusy" @click="exportObsidianZip">
+              导出 Markdown 包（{{ obsidian.total }} 篇）
+            </button>
+            <button
+              v-if="vaultState.found"
+              class="btn primary sm block"
+              :disabled="obsidianBusy"
+              @click="writeToDetectedVault"
+            >
+              写入 Vault（{{ vaultState.name }}/MemoAgent）
+            </button>
+            <template v-else-if="!vaultDetecting">
+              <p v-if="vaultState.message" class="small faint" style="margin: 0">
+                {{ vaultState.message }}
+              </p>
+              <button class="btn sm block" :disabled="obsidianBusy" @click="detectVault">
+                重新识别 Vault
+              </button>
+              <button
+                v-if="canWriteDirect"
+                class="btn sm block"
+                :disabled="obsidianBusy"
+                @click="writeToVault"
+              >
+                手动选择目录写入
+              </button>
+            </template>
+            <p
+              v-if="vaultState.found"
+              class="small faint"
+              style="margin: 0; word-break: break-all"
+            >
+              目标 Vault：{{ vaultState.path }}
+            </p>
+            <p v-if="obsidianError" class="small" style="margin: 0; color: var(--danger)">
+              {{ obsidianError }}
+            </p>
+
             <button class="btn sm block" @click="resetSeed">重新加载资产</button>
             <button class="btn sm block danger" @click="clearAll">清空本地设置</button>
             <p class="small faint" style="margin: 0">
@@ -92,8 +130,18 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
-import { getProfile, saveProfileApi } from "@/api/profile";
+import { saveProfileApi } from "@/api/profile";
 import { errorMessage } from "@/api/http";
+import {
+  downloadObsidianZip,
+  fetchObsidianPreview,
+  fetchObsidianVault,
+  supportsDirectWrite,
+  writeNotesToVault,
+  writeObsidianToVault,
+  type ObsidianPreview,
+  type ObsidianVault,
+} from "@/api/obsidian";
 import { useLibraryStore } from "@/stores/library";
 import { useUiStore, type ProfileSettings } from "@/stores/ui";
 
@@ -105,10 +153,105 @@ const stats = computed(() => library.stats);
 const form = reactive<ProfileSettings>({ ...ui.profile });
 const profileSaving = ref(false);
 
+const obsidian = ref<ObsidianPreview>({ diaries: 0, experiences: 0, knowledge: 0, total: 0 });
+const obsidianBusy = ref(false);
+const obsidianError = ref("");
+const canWriteDirect = supportsDirectWrite();
+
+/** 后端读 obsidian.json 得到的当前 Vault；识别失败时退回浏览器手选目录 */
+const vaultState = ref<ObsidianVault>({
+  found: false,
+  path: null,
+  name: null,
+  configFile: "",
+  message: "",
+  candidates: [],
+});
+const vaultDetecting = ref(true);
+
 onMounted(async () => {
   await ui.loadProfile();
   Object.assign(form, ui.profile);
+  loadObsidian();
+  detectVault();
 });
+
+async function loadObsidian() {
+  try {
+    obsidian.value = await fetchObsidianPreview();
+    obsidianError.value = "";
+  } catch (error) {
+    obsidianError.value = errorMessage(error, "无法读取导出统计，请确认后端已重启");
+  }
+}
+
+/** 后端读 obsidian.json，找出 Obsidian 当前打开的 Vault */
+async function detectVault() {
+  vaultDetecting.value = true;
+  try {
+    vaultState.value = await fetchObsidianVault();
+  } catch (error) {
+    vaultState.value = {
+      found: false,
+      path: null,
+      name: null,
+      configFile: "",
+      message: errorMessage(error, "识别 Vault 失败，请确认后端已重启"),
+      candidates: [],
+    };
+  } finally {
+    vaultDetecting.value = false;
+  }
+}
+
+/** 直接写盘：不需要选目录，路径用识别结果；内容没变的文件由后端跳过 */
+async function writeToDetectedVault() {
+  obsidianBusy.value = true;
+  try {
+    const result = await writeObsidianToVault(vaultState.value.path || undefined);
+    if (result.failed > 0) {
+      ui.toast(result.message || `${result.failed} 篇写入失败`, "error");
+    } else if (result.written > 0) {
+      ui.toast(`已写入 ${result.written} 篇，跳过 ${result.skipped} 篇未变化`);
+    } else {
+      ui.toast("内容没有变化，已跳过全部笔记");
+    }
+  } catch (error) {
+    ui.toast(errorMessage(error, "写入 Vault 失败"), "error");
+  } finally {
+    obsidianBusy.value = false;
+  }
+}
+
+async function exportObsidianZip() {
+  obsidianBusy.value = true;
+  try {
+    const result = await downloadObsidianZip();
+    ui.toast(`已导出 ${Math.max(1, Math.round(result.bytes / 1024))} KB`);
+  } catch (error) {
+    ui.toast(errorMessage(error, "导出失败"), "error");
+  } finally {
+    obsidianBusy.value = false;
+  }
+}
+
+async function writeToVault() {
+  obsidianBusy.value = true;
+  try {
+    const result = await writeNotesToVault();
+    ui.toast(
+      result.written > 0
+        ? `已写入 ${result.written} 篇，跳过 ${result.skipped} 篇未变化`
+        : "内容没有变化，已跳过全部笔记",
+    );
+  } catch (error) {
+    // 用户在目录选择框里点了取消：DOMException / AbortError，不是失败
+    if ((error as DOMException)?.name === "AbortError") return;
+    ui.toast(errorMessage(error, "写入 Vault 失败"), "error");
+  } finally {
+    obsidianBusy.value = false;
+  }
+}
 
 async function saveProfile() {
   const payload: ProfileSettings = {
