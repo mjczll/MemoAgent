@@ -7,7 +7,9 @@
         <p class="lede" style="margin-bottom: 0">
           {{
             draft?.incident
-              ? "确认标题和正文。保存后会出现在日记列表，并提炼一张经验。"
+              ? autoExtract
+                ? "确认标题和正文。保存后会出现在日记列表，并提炼一张经验。"
+                : "确认标题和正文。保存后会出现在日记列表；未开启「自动结构化提炼」，不会生成经验卡。"
               : "这次没有具体经历。保存后不生成日记和经验，只写入你点过同意的补充和已确认的关联。"
           }}
         </p>
@@ -95,15 +97,22 @@
           </div>
         </div>
 
-        <div v-if="draft.incident && autoExtract" class="panel">
+        <div v-if="draft.incident" class="panel">
           <div class="panel-head"><b>相关记录</b></div>
           <div class="panel-body stack" style="gap: 8px">
             <label v-for="item in related" :key="`${item.type}-${item.id}`" class="row" style="align-items: flex-start">
-              <input v-model="selectedRelated[relationKey(item)]" type="checkbox" />
+              <input
+                v-model="selectedRelated[relationKey(item)]"
+                type="checkbox"
+                :disabled="item.type === 'knowledge' && !autoExtract"
+              />
               <span class="small">{{ relationLabel(item.type) }} · {{ item.title }}</span>
             </label>
             <p v-if="relatedLoading" class="small faint">正在查找相关记录…</p>
             <p v-else-if="!related.length" class="small faint">没有对上已有的日记、经验或知识。保存后只会留下这次新写的日记和经验。</p>
+            <p v-if="!autoExtract && hasKnowledgeHit" class="small faint" style="margin: 0">
+              未开启「采访结束后自动结构化提炼」，不会生成经验卡，知识无法挂关联；勾选日记或经验仍会把它们挂到这篇日记上。
+            </p>
           </div>
         </div>
 
@@ -187,6 +196,8 @@ const saved = computed(() => store.current?.status === "committed");
 const relatedList = ref<RecallHit[]>([]);
 const relatedLoading = ref(false);
 const related = computed(() => relatedList.value);
+/** 召回到知识项且提炼关闭：这批勾选不生效，需要给用户一句解释 */
+const hasKnowledgeHit = computed(() => related.value.some((item) => item.type === "knowledge"));
 
 function relationKey(item: RecallHit) {
   return `${item.type}:${item.id}`;
@@ -220,7 +231,10 @@ watch(
     const next = { ...selectedRelated.value };
     for (const item of items) {
       const key = relationKey(item);
-      if (next[key] === undefined) next[key] = true;
+      if (next[key] === undefined) {
+        // 关掉提炼时没有经验载体，知识项默认不勾（勾了也存不进去），日记/经验照常默认勾选
+        next[key] = item.type !== "knowledge" || autoExtract.value;
+      }
     }
     selectedRelated.value = next;
   },
@@ -282,6 +296,8 @@ async function save() {
   const experienceIds: number[] = [];
   for (const item of related.value) {
     if (!selectedRelated.value[relationKey(item)]) continue;
+    // 提炼关闭时没有经验卡承接知识关联，即便勾选状态残留也不提交
+    if (item.type === "knowledge" && !autoExtract.value) continue;
     if (item.type === "knowledge") knowledgeIds.push(item.id);
     if (item.type === "experience") experienceIds.push(item.id);
     if (item.type === "diary") {
@@ -307,7 +323,7 @@ async function save() {
     });
     await library.hydrate();
     if (created.diaryId) {
-      ui.toast("已保存日记和经验");
+      ui.toast(created.experienceId ? "已保存日记和经验" : "已保存日记");
       router.push(`/diaries/${created.diaryId}`);
       return;
     }

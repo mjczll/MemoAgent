@@ -107,6 +107,8 @@ interface FsFileHandle {
 
 interface FsDirectoryHandle {
   name: string;
+  queryPermission?(options?: { mode?: "read" | "readwrite" }): Promise<PermissionState>;
+  requestPermission?(options?: { mode?: "read" | "readwrite" }): Promise<PermissionState>;
   getDirectoryHandle(name: string, options?: { create?: boolean }): Promise<FsDirectoryHandle>;
   getFileHandle(name: string, options?: { create?: boolean }): Promise<FsFileHandle>;
 }
@@ -118,6 +120,9 @@ export function supportsDirectWrite(): boolean {
 }
 
 const HASH_KEY = "memoagent:obsidian:hashes";
+const DIR_DB = "memoagent-obsidian";
+const DIR_STORE = "handles";
+const DIR_KEY = "vault";
 
 function loadHashes(): Record<string, string> {
   try {
@@ -127,50 +132,156 @@ function loadHashes(): Record<string, string> {
   }
 }
 
+/* ---- 目录句柄持久化：存在 IndexedDB，下次不必重选 ---- */
+
+function openDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DIR_DB, 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(DIR_STORE)) {
+        db.createObjectStore(DIR_STORE);
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function withStore<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest): Promise<T | null> {
+  try {
+    const db = await openDb();
+    return await new Promise<T | null>((resolve) => {
+      const request = run(db.transaction(DIR_STORE, mode).objectStore(DIR_STORE));
+      request.onsuccess = () => resolve((request.result as T) ?? null);
+      request.onerror = () => resolve(null);
+    });
+  } catch {
+    return null;
+  }
+}
+
+function loadDirHandle(): Promise<FsDirectoryHandle | null> {
+  return withStore<FsDirectoryHandle>("readonly", (store) => store.get(DIR_KEY));
+}
+
+function saveDirHandle(handle: FsDirectoryHandle): Promise<unknown> {
+  return withStore("readwrite", (store) => store.put(handle, DIR_KEY));
+}
+
+/** 忘掉已记住的目录：下次写入会重新弹选择框 */
+export async function forgetVaultDirectory(): Promise<void> {
+  await withStore("readwrite", (store) => store.delete(DIR_KEY));
+}
+
+/** 已记住的目录名（仅用于界面展示「上次写入到哪」），没记住返回 null */
+export async function rememberedVaultName(): Promise<string | null> {
+  const handle = await loadDirHandle();
+  return handle?.name ?? null;
+}
+
+/** 句柄还在，但浏览器可能已收回写权限：能续期就续期，不行就当作没记住 */
+async function ensureWritable(handle: FsDirectoryHandle): Promise<boolean> {
+  if (typeof handle.queryPermission !== "function") {
+    return true;
+  }
+  const options = { mode: "readwrite" as const };
+  try {
+    if ((await handle.queryPermission(options)) === "granted") {
+      return true;
+    }
+    if (typeof handle.requestPermission !== "function") {
+      return false;
+    }
+    return (await handle.requestPermission(options)) === "granted";
+  } catch {
+    return false;
+  }
+}
+
+export interface BrowserWriteResult {
+  folder: string;
+  written: number;
+  skipped: number;
+  failed: number;
+  total: number;
+  /** true = 复用了已记住的目录，本次没有弹选择框 */
+  reused: boolean;
+}
+
 /**
- * 让用户选一次 Vault 目录，然后把笔记直接写进去（会在其下建 MemoAgent/ 子目录，不动根目录其它文件）。
+ * 把笔记写进**用户自己电脑上**的 Obsidian Vault。
+ *
+ * 数据先由后端渲染成 JSON（GET /api/obsidian/notes），落盘完全在浏览器里完成，
+ * 因此后端部署在本机还是云端都不影响——只要浏览器能访问后端即可。
+ * 目录句柄存在 IndexedDB，第二次起不再弹选择框，仅在权限过期时请求一次续期。
  *
  * 幂等：hash 与上次写入一致且文件仍在 → 跳过。跳过前会确认文件存在，
  * 因此在 Obsidian 里手工删掉某篇后再导出，它会被重新写回来。
  */
-export async function writeNotesToVault(): Promise<{ written: number; skipped: number; total: number; folder: string }> {
+export async function writeNotesToVault(options?: { repick?: boolean }): Promise<BrowserWriteResult> {
   const picker = (window as unknown as { showDirectoryPicker?: DirectoryPicker }).showDirectoryPicker;
-  if (!picker) {
-    throw new Error("当前浏览器不支持直接写入目录，请改用「导出 Markdown 包」");
+
+  let root: FsDirectoryHandle | null = options?.repick ? null : await loadDirHandle();
+  let reused = false;
+  if (root) {
+    if (await ensureWritable(root)) {
+      reused = true;
+    } else {
+      root = null;
+    }
   }
-  const root = await picker({ mode: "readwrite" });
+  if (!root) {
+    if (!picker) {
+      throw new Error("当前浏览器不支持直接写入目录，请改用「导出 Markdown 包」");
+    }
+    root = await picker({ mode: "readwrite" });
+    await saveDirHandle(root);
+  }
+
   const notes = await fetchObsidianNotes();
   const hashes = loadHashes();
   let written = 0;
   let skipped = 0;
+  let failed = 0;
 
   for (const note of notes) {
-    const segments = note.path.split("/");
-    const fileName = segments.pop() || "note.md";
-    let dir = root;
-    for (const segment of segments) {
-      dir = await dir.getDirectoryHandle(segment, { create: true });
-    }
-
-    if (hashes[note.path] === note.hash) {
-      const exists = await dir.getFileHandle(fileName).then(
-        () => true,
-        () => false,
-      );
-      if (exists) {
-        skipped++;
-        continue;
+    try {
+      const segments = note.path.split("/");
+      const fileName = segments.pop() || "note.md";
+      let dir = root;
+      for (const segment of segments) {
+        dir = await dir.getDirectoryHandle(segment, { create: true });
       }
-    }
 
-    const handle = await dir.getFileHandle(fileName, { create: true });
-    const writable = await handle.createWritable();
-    await writable.write(note.content);
-    await writable.close();
-    hashes[note.path] = note.hash;
-    written++;
+      if (hashes[note.path] === note.hash) {
+        const exists = await dir.getFileHandle(fileName).then(
+          () => true,
+          () => false,
+        );
+        if (exists) {
+          skipped++;
+          continue;
+        }
+      }
+
+      const handle = await dir.getFileHandle(fileName, { create: true });
+      const writable = await handle.createWritable();
+      await writable.write(note.content);
+      await writable.close();
+      hashes[note.path] = note.hash;
+      written++;
+    } catch (error) {
+      const name = (error as DOMException)?.name;
+      // 目录被移动/删除，或权限被收回：丢掉记住的句柄，重新选一次目录再来
+      if (reused && (name === "NotAllowedError" || name === "NotFoundError")) {
+        await forgetVaultDirectory();
+        return writeNotesToVault({ repick: true });
+      }
+      failed++;
+    }
   }
 
   localStorage.setItem(HASH_KEY, JSON.stringify(hashes));
-  return { written, skipped, total: notes.length, folder: root.name };
+  return { folder: root.name, written, skipped, failed, total: notes.length, reused };
 }

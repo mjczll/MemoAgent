@@ -1,0 +1,9 @@
+{
+  "id": "memoagent",
+  "name": "MemoAgent",
+  "version": "1.0.0",
+  "minAppVersion": "1.4.0",
+  "description": "把 MemoAgent 的日记、经验、知识写入当前 Vault 的 MemoAgent/ 目录。",
+  "author": "MemoAgent",
+  "isDesktopOnly": true
+}

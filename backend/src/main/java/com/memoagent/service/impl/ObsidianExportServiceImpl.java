@@ -25,8 +25,10 @@ import com.memoagent.mapper.KnowledgeMapper;
 import com.memoagent.mapper.KnowledgeRelatedMapper;
 import com.memoagent.mapper.KnowledgeTagMapper;
 import com.memoagent.mapper.TagMapper;
+import com.memoagent.obsidian.Digests;
 import com.memoagent.obsidian.MarkdownRenderer;
 import com.memoagent.obsidian.ObsidianVaultLocator;
+import com.memoagent.obsidian.RenderedNote;
 import com.memoagent.service.ObsidianExportService;
 import com.memoagent.vo.ObsidianNoteVO;
 import com.memoagent.vo.ObsidianPreviewVO;
@@ -45,8 +47,6 @@ import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -104,8 +104,9 @@ public class ObsidianExportServiceImpl implements ObsidianExportService {
         return vo;
     }
 
+    /** 全部笔记的渲染结果（含 README），带资产元信息供导入任务使用。 */
     @Override
-    public List<ObsidianNoteVO> notes() {
+    public List<RenderedNote> render() {
         Long userId = CurrentUser.id();
         List<Diary> diaries = diaryMapper.selectList(Wrappers.<Diary>lambdaQuery()
                 .eq(Diary::getUserId, userId)
@@ -178,16 +179,16 @@ public class ObsidianExportServiceImpl implements ObsidianExportService {
         }
 
         // 第二步：渲染。双链用上一步的名字，链接目标不存在时直接丢弃（空链接在 Obsidian 里是噪音）。
-        List<ObsidianNoteVO> notes = new ArrayList<>();
+        List<RenderedNote> notes = new ArrayList<>();
         notes.add(note(ROOT + "/README.md", MarkdownRenderer.readme(
-                LocalDateTime.now(), diaries.size(), experiences.size(), knowledgeList.size())));
+                LocalDateTime.now(), diaries.size(), experiences.size(), knowledgeList.size()), "readme", null));
 
         for (Diary diary : diaries) {
             String content = MarkdownRenderer.diary(diary,
                     diaryTags.get(diary.getId()),
                     links(diaryExperiences.get(diary.getId()), experienceNames),
                     links(diaryKnowledge.get(diary.getId()), knowledgeNames));
-            notes.add(note(ROOT + "/Diary/" + diaryNames.get(diary.getId()) + ".md", content));
+            notes.add(note(ROOT + "/Diary/" + diaryNames.get(diary.getId()) + ".md", content, "diary", diary.getId()));
         }
         for (Experience experience : experiences) {
             String diaryLink = MarkdownRenderer.link(diaryNames.get(experience.getDiaryId()));
@@ -195,15 +196,28 @@ public class ObsidianExportServiceImpl implements ObsidianExportService {
                     experienceTags.get(experience.getId()),
                     diaryLink,
                     links(experienceKnowledge.get(experience.getId()), knowledgeNames));
-            notes.add(note(ROOT + "/Experience/" + experienceNames.get(experience.getId()) + ".md", content));
+            notes.add(note(ROOT + "/Experience/" + experienceNames.get(experience.getId()) + ".md", content,
+                    "experience", experience.getId()));
         }
         for (Knowledge knowledge : knowledgeList) {
             String content = MarkdownRenderer.knowledge(knowledge,
                     knowledgeTags.get(knowledge.getId()),
                     links(knowledgeRelated.get(knowledge.getId()), knowledgeNames));
-            notes.add(note(ROOT + "/Knowledge/" + knowledgeNames.get(knowledge.getId()) + ".md", content));
+            notes.add(note(ROOT + "/Knowledge/" + knowledgeNames.get(knowledge.getId()) + ".md", content,
+                    "knowledge", knowledge.getId()));
         }
         return notes;
+    }
+
+    @Override
+    public List<ObsidianNoteVO> notes() {
+        return render().stream().map(item -> {
+            ObsidianNoteVO vo = new ObsidianNoteVO();
+            vo.setPath(item.path());
+            vo.setContent(item.content());
+            vo.setHash(item.hash());
+            return vo;
+        }).toList();
     }
 
     @Override
@@ -408,26 +422,7 @@ public class ObsidianExportServiceImpl implements ObsidianExportService {
         return candidate;
     }
 
-    private ObsidianNoteVO note(String path, String content) {
-        ObsidianNoteVO vo = new ObsidianNoteVO();
-        vo.setPath(path);
-        vo.setContent(content);
-        vo.setHash(hash(content));
-        return vo;
-    }
-
-    /** 内容指纹（SHA-256 前 16 位）：前端直写 Vault 时据此跳过未变化的文件。 */
-    private String hash(String content) {
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256")
-                    .digest(content.getBytes(StandardCharsets.UTF_8));
-            StringBuilder hex = new StringBuilder();
-            for (int index = 0; index < 8; index++) {
-                hex.append(String.format("%02x", digest[index]));
-            }
-            return hex.toString();
-        } catch (NoSuchAlgorithmException exception) {
-            return Integer.toHexString(content.hashCode());
-        }
+    private RenderedNote note(String path, String content, String assetType, Long assetId) {
+        return new RenderedNote(path, content, Digests.contentHash(content), assetType, assetId);
     }
 }

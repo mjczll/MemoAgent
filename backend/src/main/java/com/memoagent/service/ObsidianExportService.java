@@ -1,5 +1,6 @@
 package com.memoagent.service;
 
+import com.memoagent.obsidian.RenderedNote;
 import com.memoagent.vo.ObsidianNoteVO;
 import com.memoagent.vo.ObsidianPreviewVO;
 import com.memoagent.vo.ObsidianVaultVO;
@@ -19,6 +20,14 @@ public interface ObsidianExportService {
 
     /** 全部笔记（含 README），路径相对 Vault 根。 */
     List<ObsidianNoteVO> notes();
+
+    /**
+     * 全部笔记的渲染结果，额外带 assetType / assetId。
+     *
+     * 导入任务需要知道每篇笔记对应哪条资产，才能在下次导入时算出 DELETE；
+     * 内容本身与 {@link #notes()} 完全相同（同一份渲染，不重复实现）。
+     */
+    List<RenderedNote> render();
 
     /** 打成 zip（UTF-8 文件名），供浏览器直接下载。 */
     byte[] zip();
