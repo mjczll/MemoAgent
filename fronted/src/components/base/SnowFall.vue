@@ -1,5 +1,5 @@
 <template>
-  <div class="field-bg" :style="{ opacity: ui.isDark ? 1 : 0.45 }">
+  <div class="field-bg" :style="{ opacity: layerOpacity }">
     <span
       v-for="flake in flakes"
       :key="flake.id"
@@ -19,9 +19,21 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue";
+import { useRoute } from "vue-router";
 import { useUiStore } from "@/stores/ui";
 
 const ui = useUiStore();
+const route = useRoute();
+
+/**
+ * 设置页要读信息，不要氛围：粒子压到三成，其余页面保持原样。
+ * 用路由名判定而不是页面自己改样式——粒子层是全屏 fixed 的，改不到。
+ */
+const layerOpacity = computed(() => {
+  const base = ui.isDark ? 1 : 0.45;
+  return route.name === "settings" ? base * 0.3 : base;
+});
 
 interface Flake {
   id: number;
